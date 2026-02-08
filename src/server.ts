@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { initDatabase } from './db/index.js';
 import { getAdGuidelines } from './tools/consumer/get-guidelines.js';
 import { authenticate, extractKeyFromHeader, type AuthContext, AuthError } from './auth/middleware.js';
+import { RateLimiter, RateLimitError } from './auth/rate-limiter.js';
 
 // ─── CLI Args ────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,18 @@ function requireAuth(extra: { sessionId?: string }, requiredType?: 'advertiser' 
   return auth;
 }
 
+// ─── Rate Limiter ─────────────────────────────────────────────────────────────
+
+const rateLimiter = new RateLimiter();
+rateLimiter.startCleanup();
+
+/** Check rate limit for the current tool call. Throws on exceeded. */
+function checkRateLimit(extra: { sessionId?: string }, toolName: string): void {
+  const auth = getAuth(extra);
+  if (!auth) return; // No auth = no rate limiting (public tools)
+  rateLimiter.enforce(auth.key_id, toolName);
+}
+
 // ─── MCP Server ──────────────────────────────────────────────────────────────
 
 const server = new McpServer({
@@ -97,8 +110,8 @@ server.tool(
     language: z.string().default('en').describe('Language code'),
     max_results: z.number().min(1).max(10).default(3).describe('Max ads to return'),
   },
-  async (params) => {
-    // TODO(#7): Full implementation with matching engine
+  async (params, extra) => {
+    checkRateLimit(extra, 'search_ads');
     const { matchAds, rankAds } = await import('./matching/index.js');
     const { getActiveAds } = await import('./db/index.js');
 
@@ -165,6 +178,7 @@ server.tool(
   },
   async (params, extra) => {
     const auth = requireAuth(extra, 'developer');
+    checkRateLimit(extra, 'report_event');
     const { getAdById, insertEvent, updateAdStats, updateCampaignSpent, updateCampaignStatus, getCampaignById } = await import('./db/index.js');
 
     const ad = getAdById(db, params.ad_id);
@@ -262,6 +276,7 @@ server.tool(
   },
   async (params, extra) => {
     const auth = requireAuth(extra, 'advertiser');
+    checkRateLimit(extra, 'create_campaign');
     const { createCampaign } = await import('./db/index.js');
 
     const campaign = createCampaign(db, {
@@ -309,6 +324,7 @@ server.tool(
   },
   async (params, extra) => {
     const auth = requireAuth(extra, 'advertiser');
+    checkRateLimit(extra, 'create_ad');
     const { createAd, getCampaignById } = await import('./db/index.js');
 
     const campaign = getCampaignById(db, params.campaign_id);
@@ -358,6 +374,7 @@ server.tool(
   },
   async (params, extra) => {
     const auth = requireAuth(extra, 'advertiser');
+    checkRateLimit(extra, 'get_campaign_analytics');
     const { getCampaignById, getAdsByCampaign } = await import('./db/index.js');
 
     const campaign = getCampaignById(db, params.campaign_id);
