@@ -211,4 +211,83 @@ describe('HTTP Transport', () => {
     // Notifications may return 200 or 202 (accepted)
     expect([200, 202, 204]).toContain(notifRes.status);
   });
+  // ─── Developer Key via HTTP ──────────────────────────────────────────────
+
+  it('POST /mcp with developer API key → initializes session', async () => {
+    const res = await fetch(`${BASE_URL}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+        'Authorization': `Bearer ${devKey}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'dev-test', version: '1.0' },
+        },
+        id: 1,
+      }),
+    });
+    expect(res.status).toBe(200);
+    const sessionId = res.headers.get('mcp-session-id');
+    expect(sessionId).toBeDefined();
+  });
+
+  // ─── Session Cleanup (DELETE) ───────────────────────────────────────────
+
+  it('DELETE /mcp with session ID → closes session, subsequent requests fail', async () => {
+    // 1. Initialize a session
+    const initRes = await fetch(`${BASE_URL}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+        'Authorization': `Bearer ${advKey}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'delete-test', version: '1.0' },
+        },
+        id: 1,
+      }),
+    });
+    expect(initRes.status).toBe(200);
+    const sessionId = initRes.headers.get('mcp-session-id');
+    expect(sessionId).toBeDefined();
+
+    // 2. DELETE the session
+    const deleteRes = await fetch(`${BASE_URL}/mcp`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json, text/event-stream',
+        'mcp-session-id': sessionId!,
+      },
+    });
+    expect([200, 204]).toContain(deleteRes.status);
+
+    // 3. Try to use the session — should fail (session gone)
+    const postRes = await fetch(`${BASE_URL}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+        'mcp-session-id': sessionId!,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'notifications/initialized',
+      }),
+    });
+    // Session no longer exists — transport.handleRequest should reject
+    // MCP spec: unknown session returns 404 or similar error
+    expect([400, 404, 409]).toContain(postRes.status);
+  });
 }, { timeout: 30_000 });
