@@ -104,4 +104,4 @@ Think "Google AdSense for AI agents." Adidas publishes a shoe ad with a $100 bud
 - All code changes require a GitHub issue first
 - Main branch is protected — PRs only
 - Before changing behavior: check bulloak.md, update it first if needed
-- After changing behavior: run `npx vitest run` (38 tests) + smoke test
+- After changing behavior: run `npx vitest run` (241 tests across 13 files)
