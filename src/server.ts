@@ -71,12 +71,22 @@ function checkRateLimit(extra: { sessionId?: string }, toolName: string): void {
   rateLimiter.enforce(auth.key_id, toolName);
 }
 
-// ─── MCP Server ──────────────────────────────────────────────────────────────
+// ─── MCP Server Factory ─────────────────────────────────────────────────────
+// Each transport (stdio or HTTP session) needs its own McpServer instance
+// because Protocol.connect() only supports a single transport at a time.
 
-const server = new McpServer({
-  name: 'agentic-ads',
-  version: '0.1.0',
-});
+function createMcpServer(): McpServer {
+  const server = new McpServer({
+    name: 'agentic-ads',
+    version: '0.1.0',
+  });
+
+  registerTools(server);
+
+  return server;
+}
+
+function registerTools(server: McpServer): void {
 
 // ─── Consumer Tools ──────────────────────────────────────────────────────────
 
@@ -437,6 +447,8 @@ server.tool(
   },
 );
 
+} // end registerTools
+
 // ─── Transport & Startup ─────────────────────────────────────────────────────
 
 async function startStdio() {
@@ -459,6 +471,7 @@ async function startStdio() {
     console.error('[agentic-ads] No API key provided — running without authentication (public tools only)');
   }
 
+  const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('[agentic-ads] MCP server running on stdio');
@@ -511,9 +524,17 @@ async function startHttp() {
         return;
       }
 
-      // New session
+      // New session — each session gets its own McpServer instance
+      // because Protocol.connect() only supports one transport at a time.
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => crypto.randomUUID(),
+        onsessioninitialized: (sid) => {
+          // Store transport once the session ID is assigned (after initialize)
+          transports.set(sid, transport);
+          if (auth) {
+            sessionAuthMap.set(sid, auth);
+          }
+        },
       });
 
       transport.onclose = () => {
@@ -523,15 +544,8 @@ async function startHttp() {
         }
       };
 
-      await server.connect(transport);
-
-      if (transport.sessionId) {
-        transports.set(transport.sessionId, transport);
-        if (auth) {
-          sessionAuthMap.set(transport.sessionId, auth);
-        }
-      }
-
+      const sessionServer = createMcpServer();
+      await sessionServer.connect(transport);
       await transport.handleRequest(req, res);
       return;
     }
