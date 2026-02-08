@@ -369,6 +369,39 @@ describe('Billing & Revenue', () => {
       const campaign = getCampaignById(db, campId)!;
       expect(campaign.spent).toBe(1.00);
     });
+
+    it('transaction rollback: failed insert rolls back all changes', () => {
+      const { adId, campId } = setupCampaign('cpc', 0.50, 100);
+
+      // Simulate a transaction that partially succeeds then throws
+      const brokenTransaction = db.transaction(() => {
+        insertEvent(db, {
+          ad_id: adId,
+          developer_id: developerId,
+          event_type: 'click',
+          amount_charged: 0.50,
+          developer_revenue: 0.35,
+          platform_revenue: 0.15,
+        });
+        updateAdStats(db, adId, 'click', 0.50);
+        updateCampaignSpent(db, campId, 0.50);
+        // Simulate failure after all writes
+        throw new Error('simulated crash');
+      });
+
+      expect(() => brokenTransaction()).toThrow('simulated crash');
+
+      // Everything should be rolled back
+      const ad = getAdById(db, adId)!;
+      expect(ad.clicks).toBe(0);
+      expect(ad.spend).toBe(0);
+
+      const campaign = getCampaignById(db, campId)!;
+      expect(campaign.spent).toBe(0);
+
+      const events = db.prepare('SELECT COUNT(*) as cnt FROM events WHERE ad_id = ?').get(adId) as { cnt: number };
+      expect(events.cnt).toBe(0);
+    });
   });
 
   // ─── Error Paths ───────────────────────────────────────────────────────────

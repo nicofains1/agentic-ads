@@ -137,7 +137,7 @@ Consumer Onboarding
 │   └── Key format: aa_dev_<64 hex chars>                                      🟢 tests/auth/middleware.test.ts
 ├── Conectar al MCP
 │   ├── stdio: --api-key aa_dev_... → auth OK                                 🟢 tests/integration/mcp-stdio.test.ts
-│   ├── HTTP: Authorization: Bearer aa_dev_... → auth OK                       🟡 tests/integration/http-transport.test.ts (advKey tested; devKey implicit)
+│   ├── HTTP: Authorization: Bearer aa_dev_... → auth OK                       🟢 tests/integration/http-transport.test.ts
 │   └── Sin key → modo público (solo tools sin auth)                           🟢 tests/integration/http-transport.test.ts + stdio-auth.test.ts
 ├── Verificar acceso
 │   ├── Puede llamar: search_ads, report_event, get_ad_guidelines             🟢 tests/e2e.test.ts
@@ -198,7 +198,7 @@ search_ads
 │   └── MIN_RELEVANCE_THRESHOLD = 0.1: debajo se descarta                    🟢 tests/matching/ranker.test.ts
 │
 └── Edge Cases
-    ├── No hay ads en DB → { ads: [], message: "No ads available" }           🟡 tests/e2e.test.ts (no-match)
+    ├── No hay ads en DB → { ads: [], message: "No ads available" }           🟢 tests/integration/mcp-stdio.test.ts
     ├── Todos los campaigns pausados → resultado vacío                        🟢 tests/db/crud.test.ts
     ├── Todos los campaigns budget agotado → resultado vacío                  🟢 tests/db/crud.test.ts
     ├── max_results=1 → solo el mejor ad                                      🟢 tests/matching/ranker.test.ts
@@ -255,7 +255,7 @@ report_event
 
 ├── Atomicity (transacción SQLite)
 │   ├── insertEvent + updateAdStats + updateCampaignSpent en una transacción  🟢 tests/billing/pricing.test.ts
-│   ├── Si falla alguno → rollback completo                                   🟡 (implicit via SQLite transaction)
+│   ├── Si falla alguno → rollback completo                                   🟢 tests/billing/pricing.test.ts
 │   └── Auto-pause check dentro de la transacción                             🟢 tests/billing/pricing.test.ts
 
 ├── Output
@@ -327,12 +327,12 @@ API Keys
 Rate Limiting
 ├── Sliding window por (key_id, tool_name)                                    🟢 tests/auth/rate-limiter.test.ts
 ├── Límites
-│   ├── search_ads: 60/min                                                    🟡 (tested via configurable limits)
-│   ├── report_event: 120/min                                                 🟡 (tested via configurable limits)
-│   ├── create_campaign: 10/min                                               🟡 (tested via configurable limits)
-│   ├── create_ad: 10/min                                                     🟡 (tested via configurable limits)
-│   ├── get_campaign_analytics: 30/min                                        🟡 (tested via configurable limits)
-│   └── get_ad_guidelines: 60/min                                             🟡 (tested via configurable limits)
+│   ├── search_ads: 60/min                                                    🟢 tests/auth/rate-limiter.test.ts
+│   ├── report_event: 120/min                                                 🟢 tests/auth/rate-limiter.test.ts
+│   ├── create_campaign: 10/min                                               🟢 tests/auth/rate-limiter.test.ts
+│   ├── create_ad: 10/min                                                     🟢 tests/auth/rate-limiter.test.ts
+│   ├── get_campaign_analytics: 30/min                                        🟢 tests/auth/rate-limiter.test.ts
+│   └── get_ad_guidelines: 60/min                                             🟢 tests/auth/rate-limiter.test.ts
 ├── Excedido → RateLimitError con retryAfterMs                                🟢 tests/auth/rate-limiter.test.ts
 ├── Después del window → se resetea                                           🟢 tests/auth/rate-limiter.test.ts
 ├── Keys diferentes no interfieren                                            🟢 tests/auth/rate-limiter.test.ts
@@ -365,14 +365,14 @@ Transport: HTTP
 ├── Sessions
 │   ├── Nueva conexión → sessionId UUID                                       🟢 tests/integration/http-transport.test.ts
 │   ├── mcp-session-id header → reutiliza sesión                              🟢 tests/integration/http-transport.test.ts
-│   ├── onclose → cleanup transport + auth                                    🟡 (logic exists in server.ts; not directly tested)
-│   └── Auth se puede actualizar entre requests                               🟡 (logic exists in server.ts; not directly tested)
+│   ├── onclose → cleanup transport + auth                                    🟢 tests/integration/http-transport.test.ts
+│   └── Auth se puede actualizar entre requests                               🟡 (logic exists in server.ts; not directly tested via tool call)
 └── 404: paths desconocidos → { error: "Not found..." }                       🟢 tests/integration/http-transport.test.ts
 
 OpenClaw Skill
 ├── SKILL.md frontmatter YAML válido                                           🟢 tests/openclaw-skill.test.ts
 ├── mcp-config.example.json funcional                                          🟢 tests/openclaw-skill.test.ts
-└── README con setup guide                                                     🟡 (no separate README in openclaw-skill/)
+└── README con setup guide                                                     🟢 tests/openclaw-skill.test.ts
 ```
 
 ---

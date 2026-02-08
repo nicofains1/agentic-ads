@@ -137,6 +137,57 @@ describe('RateLimiter', () => {
     });
   });
 
+  describe('default limits per tool', () => {
+    // Verify the production DEFAULT_LIMITS are correctly configured
+    let defaultLimiter: RateLimiter;
+
+    beforeEach(() => {
+      defaultLimiter = new RateLimiter(); // Uses DEFAULT_LIMITS
+    });
+
+    it('search_ads: 60 requests/min', () => {
+      for (let i = 0; i < 60; i++) {
+        expect(defaultLimiter.check('k', 'search_ads', 0).allowed).toBe(true);
+      }
+      expect(defaultLimiter.check('k', 'search_ads', 0).allowed).toBe(false);
+    });
+
+    it('report_event: 120 requests/min', () => {
+      for (let i = 0; i < 120; i++) {
+        expect(defaultLimiter.check('k', 'report_event', 0).allowed).toBe(true);
+      }
+      expect(defaultLimiter.check('k', 'report_event', 0).allowed).toBe(false);
+    });
+
+    it('create_campaign: 10 requests/min', () => {
+      for (let i = 0; i < 10; i++) {
+        expect(defaultLimiter.check('k', 'create_campaign', 0).allowed).toBe(true);
+      }
+      expect(defaultLimiter.check('k', 'create_campaign', 0).allowed).toBe(false);
+    });
+
+    it('create_ad: 10 requests/min', () => {
+      for (let i = 0; i < 10; i++) {
+        expect(defaultLimiter.check('k', 'create_ad', 0).allowed).toBe(true);
+      }
+      expect(defaultLimiter.check('k', 'create_ad', 0).allowed).toBe(false);
+    });
+
+    it('get_campaign_analytics: 30 requests/min', () => {
+      for (let i = 0; i < 30; i++) {
+        expect(defaultLimiter.check('k', 'get_campaign_analytics', 0).allowed).toBe(true);
+      }
+      expect(defaultLimiter.check('k', 'get_campaign_analytics', 0).allowed).toBe(false);
+    });
+
+    it('get_ad_guidelines: 60 requests/min', () => {
+      for (let i = 0; i < 60; i++) {
+        expect(defaultLimiter.check('k', 'get_ad_guidelines', 0).allowed).toBe(true);
+      }
+      expect(defaultLimiter.check('k', 'get_ad_guidelines', 0).allowed).toBe(false);
+    });
+  });
+
   describe('reset', () => {
     it('clears all state', () => {
       limiter.check('key1', 'test_tool');
