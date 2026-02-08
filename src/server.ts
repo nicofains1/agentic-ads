@@ -447,6 +447,109 @@ server.tool(
   },
 );
 
+server.tool(
+  'update_campaign',
+  'Update an existing campaign: modify name, objective, budget, bid, or status (pause/resume)',
+  {
+    campaign_id: z.string().describe('Campaign ID to update'),
+    name: z.string().optional().describe('New campaign name'),
+    objective: z.enum(['awareness', 'traffic', 'conversions']).optional().describe('New objective'),
+    status: z.enum(['active', 'paused']).optional().describe('New status (active to pause, paused to resume)'),
+    total_budget: z.number().positive().optional().describe('New total budget in USD'),
+    daily_budget: z.number().positive().optional().describe('New daily budget cap in USD'),
+    bid_amount: z.number().positive().optional().describe('New bid amount'),
+    start_date: z.string().optional().describe('New start date (ISO format)'),
+    end_date: z.string().optional().describe('New end date (ISO format)'),
+  },
+  async (params, extra) => {
+    const auth = requireAuth(extra, 'advertiser');
+    checkRateLimit(extra, 'update_campaign');
+    const { getCampaignById, updateCampaign } = await import('./db/index.js');
+
+    const campaign = getCampaignById(db, params.campaign_id);
+    if (!campaign) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign not found' }) }], isError: true };
+    }
+    if (campaign.advertiser_id !== auth.entity_id) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign does not belong to your account' }) }], isError: true };
+    }
+    if (campaign.status === 'completed') {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign is completed and cannot be modified' }) }], isError: true };
+    }
+
+    // Validate budget not below spent
+    if (params.total_budget !== undefined && params.total_budget < campaign.spent) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: `New total_budget ($${params.total_budget}) cannot be less than spent ($${campaign.spent})` }) }], isError: true };
+    }
+
+    // Build update data (exclude campaign_id, exclude pricing_model changes)
+    const { campaign_id: _cid, ...updateFields } = params;
+    const updated = updateCampaign(db, params.campaign_id, updateFields);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            campaign_id: updated!.id,
+            name: updated!.name,
+            status: updated!.status,
+            objective: updated!.objective,
+            total_budget: updated!.total_budget,
+            daily_budget: updated!.daily_budget,
+            spent: updated!.spent,
+            pricing_model: updated!.pricing_model,
+            bid_amount: updated!.bid_amount,
+            message: 'Campaign updated successfully',
+          }, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  'list_campaigns',
+  'List all campaigns for the authenticated advertiser with summary stats',
+  {
+    status: z.enum(['draft', 'active', 'paused', 'completed']).optional().describe('Filter by campaign status'),
+  },
+  async (params, extra) => {
+    const auth = requireAuth(extra, 'advertiser');
+    checkRateLimit(extra, 'list_campaigns');
+    const { listCampaigns } = await import('./db/index.js');
+
+    const campaigns = listCampaigns(db, auth.entity_id, {
+      status: params.status,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            campaigns: campaigns.map((c) => ({
+              campaign_id: c.id,
+              name: c.name,
+              status: c.status,
+              objective: c.objective,
+              pricing_model: c.pricing_model,
+              bid_amount: c.bid_amount,
+              budget: {
+                total: c.total_budget,
+                daily: c.daily_budget,
+                spent: c.spent,
+                remaining: c.total_budget - c.spent,
+              },
+            })),
+            total: campaigns.length,
+          }, null, 2),
+        },
+      ],
+    };
+  },
+);
+
 } // end registerTools
 
 // ─── Transport & Startup ─────────────────────────────────────────────────────

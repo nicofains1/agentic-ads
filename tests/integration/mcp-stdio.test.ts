@@ -74,7 +74,7 @@ describe('MCP Integration: stdio transport', () => {
   // ─── Tool Listing ──────────────────────────────────────────────────────────
 
   describe('Tool listing', () => {
-    it('lists all 6 tools', async () => {
+    it('lists all 8 tools', async () => {
       const client = await createMcpClient(dbPath, advKey);
       try {
         const tools = await client.listTools();
@@ -84,8 +84,10 @@ describe('MCP Integration: stdio transport', () => {
           'create_campaign',
           'get_ad_guidelines',
           'get_campaign_analytics',
+          'list_campaigns',
           'report_event',
           'search_ads',
+          'update_campaign',
         ]);
       } finally {
         await client.close();
@@ -320,6 +322,225 @@ describe('MCP Integration: stdio transport', () => {
     });
   });
 
+  // ─── update_campaign ─────────────────────────────────────────────────────
+
+  describe('update_campaign via MCP', () => {
+    let client: Client;
+    let campaignId: string;
+
+    beforeAll(async () => {
+      client = await createMcpClient(dbPath, advKey);
+      // Create a campaign to update
+      const result = await client.callTool({
+        name: 'create_campaign',
+        arguments: {
+          name: 'Update Test Campaign',
+          objective: 'traffic',
+          total_budget: 100,
+          pricing_model: 'cpc',
+          bid_amount: 0.50,
+        },
+      });
+      campaignId = parseToolResult(result).data.campaign_id as string;
+    });
+
+    afterAll(async () => {
+      await client.close();
+    });
+
+    it('updates campaign name', async () => {
+      const result = await client.callTool({
+        name: 'update_campaign',
+        arguments: { campaign_id: campaignId, name: 'Renamed Campaign' },
+      });
+      const { data, isError } = parseToolResult(result);
+      expect(isError).toBeFalsy();
+      expect(data.name).toBe('Renamed Campaign');
+      expect(data.message).toBe('Campaign updated successfully');
+    });
+
+    it('updates budget and bid', async () => {
+      const result = await client.callTool({
+        name: 'update_campaign',
+        arguments: { campaign_id: campaignId, total_budget: 200, bid_amount: 1.00, daily_budget: 20 },
+      });
+      const { data, isError } = parseToolResult(result);
+      expect(isError).toBeFalsy();
+      expect(data.total_budget).toBe(200);
+      expect(data.bid_amount).toBe(1.00);
+      expect(data.daily_budget).toBe(20);
+    });
+
+    it('pauses campaign (active → paused)', async () => {
+      const result = await client.callTool({
+        name: 'update_campaign',
+        arguments: { campaign_id: campaignId, status: 'paused' },
+      });
+      const { data, isError } = parseToolResult(result);
+      expect(isError).toBeFalsy();
+      expect(data.status).toBe('paused');
+    });
+
+    it('resumes campaign (paused → active)', async () => {
+      const result = await client.callTool({
+        name: 'update_campaign',
+        arguments: { campaign_id: campaignId, status: 'active' },
+      });
+      const { data, isError } = parseToolResult(result);
+      expect(isError).toBeFalsy();
+      expect(data.status).toBe('active');
+    });
+
+    it('rejects completed campaign update', async () => {
+      // Mark campaign as completed directly in DB
+      const db = initDatabase(dbPath);
+      const { updateCampaignStatus } = await import('../../src/db/index.js');
+      updateCampaignStatus(db, campaignId, 'completed');
+      db.close();
+
+      const result = await client.callTool({
+        name: 'update_campaign',
+        arguments: { campaign_id: campaignId, name: 'Should Fail' },
+      });
+      const { data, isError } = parseToolResult(result);
+      expect(isError).toBe(true);
+      expect(data.error).toContain('completed');
+    });
+
+    it('rejects budget below spent', async () => {
+      // Create a campaign with some spend
+      const db = initDatabase(dbPath);
+      const { createCampaign, updateCampaignSpent } = await import('../../src/db/index.js');
+      const camp = createCampaign(db, {
+        advertiser_id: advertiserId,
+        name: 'Spent Campaign',
+        objective: 'traffic',
+        total_budget: 100,
+        pricing_model: 'cpc',
+        bid_amount: 1,
+      });
+      updateCampaignSpent(db, camp.id, 50);
+      db.close();
+
+      const result = await client.callTool({
+        name: 'update_campaign',
+        arguments: { campaign_id: camp.id, total_budget: 30 },
+      });
+      const { data, isError } = parseToolResult(result);
+      expect(isError).toBe(true);
+      expect(data.error).toContain('cannot be less than spent');
+    });
+
+    it('rejects nonexistent campaign', async () => {
+      const result = await client.callTool({
+        name: 'update_campaign',
+        arguments: { campaign_id: 'nonexistent', name: 'X' },
+      });
+      const { data, isError } = parseToolResult(result);
+      expect(isError).toBe(true);
+      expect(data.error).toBe('Campaign not found');
+    });
+
+    it('rejects campaign belonging to another advertiser', async () => {
+      const db = initDatabase(dbPath);
+      const otherAdv = createAdvertiser(db, { name: 'OtherForUpdate' });
+      const { createCampaign } = await import('../../src/db/index.js');
+      const otherCamp = createCampaign(db, {
+        advertiser_id: otherAdv.id,
+        name: 'Other Adv Campaign',
+        objective: 'traffic',
+        total_budget: 50,
+        pricing_model: 'cpc',
+        bid_amount: 1,
+      });
+      db.close();
+
+      const result = await client.callTool({
+        name: 'update_campaign',
+        arguments: { campaign_id: otherCamp.id, name: 'Hijacked' },
+      });
+      const { data, isError } = parseToolResult(result);
+      expect(isError).toBe(true);
+      expect(data.error).toBe('Campaign does not belong to your account');
+    });
+  });
+
+  // ─── list_campaigns ───────────────────────────────────────────────────────
+
+  describe('list_campaigns via MCP', () => {
+    let client: Client;
+
+    beforeAll(async () => {
+      client = await createMcpClient(dbPath, advKey);
+    });
+
+    afterAll(async () => {
+      await client.close();
+    });
+
+    it('lists campaigns for authenticated advertiser', async () => {
+      const result = await client.callTool({
+        name: 'list_campaigns',
+        arguments: {},
+      });
+      const { data, isError } = parseToolResult(result);
+      expect(isError).toBeFalsy();
+      expect(Array.isArray(data.campaigns)).toBe(true);
+      expect((data.campaigns as unknown[]).length).toBeGreaterThan(0);
+      expect(data.total).toBeGreaterThan(0);
+
+      // Each campaign should have expected fields
+      const first = (data.campaigns as Array<Record<string, unknown>>)[0];
+      expect(first.campaign_id).toBeDefined();
+      expect(first.name).toBeDefined();
+      expect(first.status).toBeDefined();
+      expect(first.pricing_model).toBeDefined();
+      expect(first.budget).toBeDefined();
+    });
+
+    it('filters by status', async () => {
+      // Create a paused campaign
+      const createResult = await client.callTool({
+        name: 'create_campaign',
+        arguments: {
+          name: 'To Be Paused',
+          objective: 'traffic',
+          total_budget: 50,
+          pricing_model: 'cpc',
+          bid_amount: 0.50,
+        },
+      });
+      const newId = parseToolResult(createResult).data.campaign_id as string;
+      await client.callTool({
+        name: 'update_campaign',
+        arguments: { campaign_id: newId, status: 'paused' },
+      });
+
+      // List only paused
+      const pausedResult = await client.callTool({
+        name: 'list_campaigns',
+        arguments: { status: 'paused' },
+      });
+      const { data } = parseToolResult(pausedResult);
+      const campaigns = data.campaigns as Array<Record<string, unknown>>;
+      expect(campaigns.length).toBeGreaterThan(0);
+      for (const c of campaigns) {
+        expect(c.status).toBe('paused');
+      }
+    });
+
+    it('empty list for advertiser with no campaigns of given status', async () => {
+      const result = await client.callTool({
+        name: 'list_campaigns',
+        arguments: { status: 'draft' },
+      });
+      const { data, isError } = parseToolResult(result);
+      expect(isError).toBeFalsy();
+      expect(data.campaigns).toEqual([]);
+      expect(data.total).toBe(0);
+    });
+  });
+
   // ─── Consumer Flow ─────────────────────────────────────────────────────────
 
   describe('Consumer flow via MCP', () => {
@@ -495,6 +716,40 @@ describe('MCP Integration: stdio transport', () => {
         const result = await client.callTool({
           name: 'get_campaign_analytics',
           arguments: { campaign_id: 'any' },
+        });
+        const content = result.content as Array<{ type: string; text: string }>;
+        const text = content[0]?.text ?? '';
+        expect(
+          result.isError === true || text.includes('advertiser authentication') || text.includes('error'),
+        ).toBe(true);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('developer cannot call update_campaign', async () => {
+      const client = await createMcpClient(dbPath, devKey);
+      try {
+        const result = await client.callTool({
+          name: 'update_campaign',
+          arguments: { campaign_id: 'any', name: 'Hijack' },
+        });
+        const content = result.content as Array<{ type: string; text: string }>;
+        const text = content[0]?.text ?? '';
+        expect(
+          result.isError === true || text.includes('advertiser authentication') || text.includes('error'),
+        ).toBe(true);
+      } finally {
+        await client.close();
+      }
+    });
+
+    it('developer cannot call list_campaigns', async () => {
+      const client = await createMcpClient(dbPath, devKey);
+      try {
+        const result = await client.callTool({
+          name: 'list_campaigns',
+          arguments: {},
         });
         const content = result.content as Array<{ type: string; text: string }>;
         const text = content[0]?.text ?? '';
