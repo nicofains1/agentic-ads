@@ -186,6 +186,20 @@ describe('RateLimiter', () => {
       }
       expect(defaultLimiter.check('k', 'get_ad_guidelines', 0).allowed).toBe(false);
     });
+
+    it('update_campaign: 20 requests/min', () => {
+      for (let i = 0; i < 20; i++) {
+        expect(defaultLimiter.check('k', 'update_campaign', 0).allowed).toBe(true);
+      }
+      expect(defaultLimiter.check('k', 'update_campaign', 0).allowed).toBe(false);
+    });
+
+    it('list_campaigns: 30 requests/min', () => {
+      for (let i = 0; i < 30; i++) {
+        expect(defaultLimiter.check('k', 'list_campaigns', 0).allowed).toBe(true);
+      }
+      expect(defaultLimiter.check('k', 'list_campaigns', 0).allowed).toBe(false);
+    });
   });
 
   describe('reset', () => {
