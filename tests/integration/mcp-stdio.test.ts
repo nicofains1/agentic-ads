@@ -735,4 +735,41 @@ describe('MCP Integration: stdio transport', () => {
       await devClient.close();
     });
   });
+
+  // ─── Empty DB: "No ads available" ──────────────────────────────────────────
+
+  describe('search_ads with no ads in DB', () => {
+    it('returns empty array with "No ads available" message', async () => {
+      // Create a fresh empty DB (no campaigns, no ads)
+      const emptyDir = mkdtempSync(join(tmpdir(), 'agentic-ads-empty-'));
+      const emptyDbPath = join(emptyDir, 'empty.db');
+      const emptyDb = initDatabase(emptyDbPath);
+      const emptyDev = createDeveloper(emptyDb, { name: 'EmptyBot' });
+      const emptyDevKey = (await import('../../src/auth/middleware.js')).generateApiKey(emptyDb, 'developer', emptyDev.id);
+      emptyDb.close();
+
+      const client = await createMcpClient(emptyDbPath, emptyDevKey);
+      try {
+        const result = await client.callTool({
+          name: 'search_ads',
+          arguments: {
+            query: 'running shoes',
+            keywords: ['sneakers'],
+            language: 'en',
+            max_results: 3,
+          },
+        });
+        const { data } = parseToolResult(result);
+        expect(data.ads).toEqual([]);
+        expect(data.message).toBe('No ads available');
+      } finally {
+        await client.close();
+        // Cleanup
+        for (const suffix of ['', '-shm', '-wal']) {
+          const f = emptyDbPath + suffix;
+          if (existsSync(f)) try { unlinkSync(f); } catch {}
+        }
+      }
+    });
+  });
 }, { timeout: 60_000 }); // Longer timeout for stdio processes

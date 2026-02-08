@@ -9,6 +9,7 @@ import { resolve } from 'node:path';
 
 const SKILL_PATH = resolve('openclaw-skill/SKILL.md');
 const MCP_CONFIG_PATH = resolve('openclaw-skill/mcp-config.example.json');
+const README_PATH = resolve('openclaw-skill/README.md');
 
 describe('OpenClaw Skill', () => {
   describe('SKILL.md', () => {
@@ -92,6 +93,32 @@ describe('OpenClaw Skill', () => {
       expect(args).toContain('--api-key');
       const keyArg = args[args.indexOf('--api-key') + 1];
       expect(keyArg).toContain('aa_dev_');
+    });
+  });
+
+  describe('README.md', () => {
+    const content = readFileSync(README_PATH, 'utf-8');
+
+    it('exists and has setup guide', () => {
+      expect(content.length).toBeGreaterThan(100);
+      expect(content).toContain('Quick Start');
+    });
+
+    it('documents Quick Start steps', () => {
+      expect(content).toContain('API Key');
+      expect(content).toContain('Start');
+      expect(content).toContain('Configure');
+    });
+
+    it('documents available MCP tools', () => {
+      expect(content).toContain('search_ads');
+      expect(content).toContain('report_event');
+      expect(content).toContain('get_ad_guidelines');
+    });
+
+    it('mentions revenue split', () => {
+      expect(content).toContain('70%');
+      expect(content).toContain('30%');
     });
   });
 });
