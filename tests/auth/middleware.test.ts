@@ -77,6 +77,19 @@ describe('Auth Middleware', () => {
       expect(() => authenticate(db, 'aa_adv_' + 'a'.repeat(64))).toThrow(AuthError);
       expect(() => authenticate(db, 'aa_adv_' + 'a'.repeat(64))).toThrow('Invalid API key');
     });
+
+    it('throws AuthError on key type mismatch (prefix ≠ stored entity_type)', () => {
+      // Create a raw key with advertiser prefix
+      const fakeRawKey = 'aa_adv_' + 'ab'.repeat(32);
+      const keyHash = hashKey(fakeRawKey);
+      // Insert into DB as developer (mismatch: prefix says adv, DB says dev)
+      db.prepare(
+        `INSERT INTO api_keys (id, key_hash, entity_type, entity_id) VALUES (?, ?, ?, ?)`,
+      ).run('mismatch-key', keyHash, 'developer', developerId);
+
+      expect(() => authenticate(db, fakeRawKey)).toThrow(AuthError);
+      expect(() => authenticate(db, fakeRawKey)).toThrow('API key type mismatch');
+    });
   });
 
   describe('hashKey', () => {
