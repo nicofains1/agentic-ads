@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "agentic-ads": {
+      "command": "node",
+      "args": [
+        "/path/to/agentic-ads/dist/server.js",
+        "--stdio",
+        "--api-key",
+        "aa_dev_YOUR_DEVELOPER_API_KEY"
+      ],
+      "env": {}
+    }
+  }
+}
