@@ -140,6 +140,54 @@ export function updateCampaignStatus(
   db.prepare('UPDATE campaigns SET status = ? WHERE id = ?').run(status, campaign_id);
 }
 
+export function updateCampaign(
+  db: InstanceType<typeof Database>,
+  campaign_id: string,
+  data: {
+    name?: string;
+    objective?: Campaign['objective'];
+    status?: Campaign['status'];
+    total_budget?: number;
+    daily_budget?: number | null;
+    bid_amount?: number;
+    start_date?: string | null;
+    end_date?: string | null;
+  },
+): Campaign | null {
+  const sets: string[] = [];
+  const params: unknown[] = [];
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      sets.push(`${key} = ?`);
+      params.push(value);
+    }
+  }
+
+  if (sets.length === 0) return getCampaignById(db, campaign_id);
+
+  params.push(campaign_id);
+  db.prepare(`UPDATE campaigns SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  return getCampaignById(db, campaign_id);
+}
+
+export function listCampaigns(
+  db: InstanceType<typeof Database>,
+  advertiser_id: string,
+  filters?: { status?: Campaign['status'] },
+): Campaign[] {
+  let sql = 'SELECT * FROM campaigns WHERE advertiser_id = ?';
+  const params: unknown[] = [advertiser_id];
+
+  if (filters?.status) {
+    sql += ' AND status = ?';
+    params.push(filters.status);
+  }
+
+  sql += ' ORDER BY created_at DESC';
+  return db.prepare(sql).all(...params) as Campaign[];
+}
+
 // ─── Ads ─────────────────────────────────────────────────────────────────────
 
 export function createAd(

@@ -31,6 +31,8 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
   create_ad:              { maxRequests: 10,  windowMs: 60_000 },
   get_campaign_analytics: { maxRequests: 30,  windowMs: 60_000 },
   get_ad_guidelines:      { maxRequests: 60,  windowMs: 60_000 },
+  update_campaign:        { maxRequests: 20,  windowMs: 60_000 },
+  list_campaigns:         { maxRequests: 30,  windowMs: 60_000 },
 };
 
 export class RateLimiter {

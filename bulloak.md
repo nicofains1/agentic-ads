@@ -99,6 +99,39 @@ get_campaign_analytics
 └── ❌ Sin auth / developer key → error de auth                                🟢 tests/integration/mcp-stdio.test.ts
 ```
 
+```
+update_campaign
+├── ✅ Update fields parciales
+│   ├── Input: campaign_id + name, objective, total_budget, daily_budget, bid  🟢 tests/integration/mcp-stdio.test.ts
+│   ├── Output: updated campaign object con todos los campos                   🟢 tests/integration/mcp-stdio.test.ts
+│   └── DB: solo campos enviados se actualizan                                 🟢 tests/integration/mcp-stdio.test.ts
+├── ✅ Status transitions (pause / resume)
+│   ├── active → paused                                                        🟢 tests/integration/mcp-stdio.test.ts
+│   ├── paused → active                                                        🟢 tests/integration/mcp-stdio.test.ts
+│   └── completed → error "Campaign is completed and cannot be modified"       🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Reducir budget debajo de spent → error "cannot be less than spent"       🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ pricing_model no se puede cambiar → error "cannot be changed"            🟡 (server rejects via Zod — no pricing_model in schema; not explicitly tested)
+├── ❌ Campaign inexistente → { error: "Campaign not found" }                   🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Campaign de otro advertiser → "does not belong to your account"          🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Sin auth → "Authentication required"                                     🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Con developer key → "requires advertiser authentication"                 🟢 tests/integration/mcp-stdio.test.ts
+└── ❌ Rate limit (>20/min) → "Rate limit exceeded"                             🟢 tests/auth/rate-limiter.test.ts
+```
+
+```
+list_campaigns
+├── ✅ Listar todos los campaigns del advertiser
+│   ├── Output: campaigns[] con id, name, status, pricing, budget summary     🟢 tests/integration/mcp-stdio.test.ts
+│   └── Ordenado por created_at DESC                                           🟢 tests/integration/mcp-stdio.test.ts
+├── ✅ Filtrar por status
+│   ├── Input: status=active → solo campaigns activos                          🟢 tests/integration/mcp-stdio.test.ts
+│   └── Input: status=paused → solo campaigns pausados                         🟢 tests/integration/mcp-stdio.test.ts
+├── ✅ Advertiser sin campaigns → { campaigns: [] }                             🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Sin auth → "Authentication required"                                     🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Con developer key → "requires advertiser authentication"                 🟢 tests/integration/mcp-stdio.test.ts
+└── ❌ Rate limit (>30/min) → "Rate limit exceeded"                             🟢 tests/auth/rate-limiter.test.ts
+```
+
 ### Budget Lifecycle
 
 ```
@@ -332,7 +365,9 @@ Rate Limiting
 │   ├── create_campaign: 10/min                                               🟢 tests/auth/rate-limiter.test.ts
 │   ├── create_ad: 10/min                                                     🟢 tests/auth/rate-limiter.test.ts
 │   ├── get_campaign_analytics: 30/min                                        🟢 tests/auth/rate-limiter.test.ts
-│   └── get_ad_guidelines: 60/min                                             🟢 tests/auth/rate-limiter.test.ts
+│   ├── get_ad_guidelines: 60/min                                             🟢 tests/auth/rate-limiter.test.ts
+│   ├── update_campaign: 20/min                                               🟢 tests/auth/rate-limiter.test.ts
+│   └── list_campaigns: 30/min                                                🟢 tests/auth/rate-limiter.test.ts
 ├── Excedido → RateLimitError con retryAfterMs                                🟢 tests/auth/rate-limiter.test.ts
 ├── Después del window → se resetea                                           🟢 tests/auth/rate-limiter.test.ts
 ├── Keys diferentes no interfieren                                            🟢 tests/auth/rate-limiter.test.ts
