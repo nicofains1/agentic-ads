@@ -66,7 +66,7 @@ Think "Google AdSense for AI agents." Adidas publishes a shoe ad with a $100 bud
 
 **Phase**: MVP complete — all 17 issues closed.
 
-### MCP Tools (6)
+### MCP Tools (8)
 | Tool | Auth | Description |
 |------|------|-------------|
 | `search_ads` | public | Search for relevant ads by query/keywords/category/geo |
@@ -75,6 +75,8 @@ Think "Google AdSense for AI agents." Adidas publishes a shoe ad with a $100 bud
 | `create_campaign` | advertiser | Create campaign with budget and pricing model |
 | `create_ad` | advertiser | Create ad with creative, keywords, targeting |
 | `get_campaign_analytics` | advertiser | Get campaign performance metrics |
+| `update_campaign` | advertiser | Update campaign fields, pause/resume |
+| `list_campaigns` | advertiser | List all campaigns with summary stats |
 
 ## Key Documents
 
@@ -104,4 +106,4 @@ Think "Google AdSense for AI agents." Adidas publishes a shoe ad with a $100 bud
 - All code changes require a GitHub issue first
 - Main branch is protected — PRs only
 - Before changing behavior: check bulloak.md, update it first if needed
-- After changing behavior: run `npx vitest run` (241 tests across 13 files)
+- After changing behavior: run `npx vitest run` (270 tests across 13 files)
