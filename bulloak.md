@@ -26,13 +26,13 @@ Publisher Onboarding
 │   ├── Solo el hash SHA-256 se almacena en api_keys                           🟢 tests/auth/middleware.test.ts
 │   └── El raw key se retorna una sola vez                                     🟢 tests/auth/middleware.test.ts
 ├── Conectar al MCP
-│   ├── stdio: --api-key aa_adv_... → auth OK, log "Authenticated as adv"     🟡 scripts/smoke-test.ts
-│   ├── HTTP: Authorization: Bearer aa_adv_... → auth OK                       🔴
-│   ├── Key inválida stdio → exit con "Auth failed"                            🔴
-│   └── Key inválida HTTP → 401 JSON { error: "..." }                         🔴
+│   ├── stdio: --api-key aa_adv_... → auth OK, log "Authenticated as adv"     🟢 tests/integration/stdio-auth.test.ts
+│   ├── HTTP: Authorization: Bearer aa_adv_... → auth OK                       🟢 tests/integration/http-transport.test.ts
+│   ├── Key inválida stdio → exit con "Auth failed"                            🟢 tests/integration/stdio-auth.test.ts
+│   └── Key inválida HTTP → 401 JSON { error: "..." }                         🟢 tests/integration/http-transport.test.ts
 └── Verificar acceso
     ├── Puede llamar: create_campaign, create_ad, get_campaign_analytics       🟢 tests/e2e.test.ts
-    ├── NO puede llamar: report_event → "requires developer authentication"    🟡 scripts/smoke-test.ts
+    ├── NO puede llamar: report_event → "requires developer authentication"    🟢 tests/integration/mcp-stdio.test.ts
     └── Puede llamar tools públicos: search_ads, get_ad_guidelines             🟢 tests/e2e.test.ts
 ```
 
@@ -56,8 +56,8 @@ create_campaign
 ├── ✅ Con fechas opcionales
 │   ├── Input: start_date, end_date en ISO format                             🟢 tests/db/crud.test.ts
 │   └── DB: fechas guardadas                                                  🟢 tests/db/crud.test.ts
-├── ❌ Sin auth → "Authentication required"                                    🟡 scripts/smoke-test.ts
-├── ❌ Con developer key → "requires advertiser authentication"                🟢 scripts/smoke-test.ts
+├── ❌ Sin auth → "Authentication required"                                    🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Con developer key → "requires advertiser authentication"                🟢 tests/integration/mcp-stdio.test.ts
 └── ❌ Rate limit (>10/min) → "Rate limit exceeded. Retry after Xs."          🟢 tests/auth/rate-limiter.test.ts
 ```
 
@@ -70,14 +70,14 @@ create_ad
 ├── ✅ Ad minimalista
 │   ├── Input: solo campaign_id, creative_text, link_url, keywords (1+)       🟢 tests/db/crud.test.ts
 │   └── Defaults: geo=ALL, language=en, categories=[]                         🟢 tests/db/crud.test.ts
-├── ❌ Campaign inexistente → { error: "Campaign not found" }                  🔴
-├── ❌ Campaign de otro advertiser → "does not belong to your account"         🔴
-├── ❌ Campaign pausada → { error: "Campaign is not active" }                  🔴
-├── ❌ creative_text > 500 chars → error de validación Zod                     🔴
-├── ❌ keywords vacío → error de validación Zod (min 1)                        🔴
-├── ❌ link_url inválida → error de validación Zod (url)                       🔴
-├── ❌ Sin auth → "Authentication required"                                    🔴
-└── ❌ Con developer key → "requires advertiser authentication"                🔴
+├── ❌ Campaign inexistente → { error: "Campaign not found" }                  🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Campaign de otro advertiser → "does not belong to your account"         🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Campaign pausada → { error: "Campaign is not active" }                  🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ creative_text > 500 chars → error de validación Zod                     🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ keywords vacío → error de validación Zod (min 1)                        🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ link_url inválida → error de validación Zod (url)                       🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Sin auth → "Authentication required"                                    🟢 tests/integration/mcp-stdio.test.ts
+└── ❌ Con developer key → "requires advertiser authentication"                🟢 tests/integration/mcp-stdio.test.ts
 ```
 
 ```
@@ -92,11 +92,11 @@ get_campaign_analytics
 │   ├── budget.spent = suma de costos                                         🟢 tests/e2e.test.ts
 │   └── budget.remaining = total - spent                                      🟢 tests/e2e.test.ts
 ├── ✅ Campaign con múltiples ads
-│   ├── Output: totals son agregados de todos los ads                         🔴
-│   └── ads[]: cada ad con stats individuales (creative truncado 50 chars)    🔴
-├── ❌ Campaign inexistente → { error: "Campaign not found" }                  🔴
-├── ❌ Campaign de otro advertiser → "does not belong to your account"         🔴
-└── ❌ Sin auth / developer key → error de auth                                🔴
+│   ├── Output: totals son agregados de todos los ads                         🟢 tests/integration/mcp-stdio.test.ts
+│   └── ads[]: cada ad con stats individuales (creative truncado 50 chars)    🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Campaign inexistente → { error: "Campaign not found" }                  🟢 tests/integration/mcp-stdio.test.ts
+├── ❌ Campaign de otro advertiser → "does not belong to your account"         🟢 tests/integration/mcp-stdio.test.ts
+└── ❌ Sin auth / developer key → error de auth                                🟢 tests/integration/mcp-stdio.test.ts
 ```
 
 ### Budget Lifecycle
@@ -136,13 +136,13 @@ Consumer Onboarding
 ├── generateApiKey("developer", id)
 │   └── Key format: aa_dev_<64 hex chars>                                      🟢 tests/auth/middleware.test.ts
 ├── Conectar al MCP
-│   ├── stdio: --api-key aa_dev_... → auth OK                                 🟡 scripts/smoke-test.ts
-│   ├── HTTP: Authorization: Bearer aa_dev_... → auth OK                       🔴
-│   └── Sin key → modo público (solo tools sin auth)                           🔴
+│   ├── stdio: --api-key aa_dev_... → auth OK                                 🟢 tests/integration/mcp-stdio.test.ts
+│   ├── HTTP: Authorization: Bearer aa_dev_... → auth OK                       🟡 tests/integration/http-transport.test.ts (advKey tested; devKey implicit)
+│   └── Sin key → modo público (solo tools sin auth)                           🟢 tests/integration/http-transport.test.ts + stdio-auth.test.ts
 ├── Verificar acceso
 │   ├── Puede llamar: search_ads, report_event, get_ad_guidelines             🟢 tests/e2e.test.ts
-│   ├── NO puede llamar: create_campaign → "requires advertiser auth"          🟢 scripts/smoke-test.ts
-│   └── NO puede llamar: create_ad, get_campaign_analytics                     🟡 scripts/smoke-test.ts
+│   ├── NO puede llamar: create_campaign → "requires advertiser auth"          🟢 tests/integration/mcp-stdio.test.ts
+│   └── NO puede llamar: create_ad, get_campaign_analytics                     🟢 tests/integration/mcp-stdio.test.ts
 └── Leer get_ad_guidelines
     ├── Output: { rules: [...], example_format, reporting_instructions }       🟢 tests/tools/guidelines.test.ts
     ├── 7 reglas definidas                                                     🟢 tests/tools/guidelines.test.ts
@@ -263,8 +263,8 @@ report_event
 │   └── remaining_budget = total - spent_antes - cost_este_evento             🟢 tests/billing/pricing.test.ts
 
 └── Error Paths
-    ├── ❌ Sin auth → "Authentication required"                                🟡 scripts/smoke-test.ts
-    ├── ❌ Con advertiser key → "requires developer authentication"            🟡 scripts/smoke-test.ts
+    ├── ❌ Sin auth → "Authentication required"                                🟢 tests/integration/mcp-stdio.test.ts
+    ├── ❌ Con advertiser key → "requires developer authentication"            🟢 tests/integration/mcp-stdio.test.ts
     ├── ❌ ad_id inexistente → { error: "Ad not found" }                       🟢 tests/billing/pricing.test.ts
     ├── ❌ Campaign no activa → { error: "Campaign not active" }               🟢 tests/billing/pricing.test.ts
     ├── ❌ Budget agotado → { error: "Campaign budget exhausted" }             🟢 tests/billing/pricing.test.ts
@@ -317,12 +317,12 @@ API Keys
 │   ├── Key vacía → AuthError "API key is required"                           🟢 tests/auth/middleware.test.ts
 │   ├── Prefijo desconocido → AuthError "Invalid API key format"              🟢 tests/auth/middleware.test.ts
 │   ├── Key no existe en DB → AuthError "Invalid API key"                     🟢 tests/auth/middleware.test.ts
-│   └── Prefijo ≠ entity_type en DB → AuthError "API key type mismatch"       🔴
+│   └── Prefijo ≠ entity_type en DB → AuthError "API key type mismatch"       🟢 tests/auth/middleware.test.ts
 └── Access Control
     ├── Advertiser key → create_campaign, create_ad, analytics                🟢 tests/e2e.test.ts
     ├── Developer key → report_event                                          🟢 tests/e2e.test.ts
-    ├── Cross-role → error claro                                              🟢 scripts/smoke-test.ts
-    └── Ownership: advertiser A no ve campaigns de advertiser B               🔴
+    ├── Cross-role → error claro                                              🟢 tests/integration/mcp-stdio.test.ts
+    └── Ownership: advertiser A no ve campaigns de advertiser B               🟢 tests/integration/mcp-stdio.test.ts
 
 Rate Limiting
 ├── Sliding window por (key_id, tool_name)                                    🟢 tests/auth/rate-limiter.test.ts
@@ -346,33 +346,33 @@ Rate Limiting
 
 ```
 Transport: stdio
-├── Arranque: node dist/server.js --stdio                                      🟡 scripts/smoke-test.ts
-├── Auth: --api-key flag                                                       🟡 scripts/smoke-test.ts
-├── Auth: env AGENTIC_ADS_API_KEY                                              🔴
-├── Sin key → log "running without authentication"                             🔴
-├── Key inválida → log "Auth failed" + process.exit(1)                         🔴
-├── Protocolo: JSON-RPC 2.0 via stdin/stdout                                   🟡 scripts/smoke-test.ts
-└── Logs a stderr (no contamina protocolo)                                     🔴
+├── Arranque: node dist/server.js --stdio                                      🟢 tests/integration/mcp-stdio.test.ts
+├── Auth: --api-key flag                                                       🟢 tests/integration/stdio-auth.test.ts
+├── Auth: env AGENTIC_ADS_API_KEY                                              🟢 tests/integration/stdio-auth.test.ts
+├── Sin key → log "running without authentication"                             🟢 tests/integration/stdio-auth.test.ts
+├── Key inválida → log "Auth failed" + process.exit(1)                         🟢 tests/integration/stdio-auth.test.ts
+├── Protocolo: JSON-RPC 2.0 via stdin/stdout                                   🟢 tests/integration/mcp-stdio.test.ts
+└── Logs a stderr (no contamina protocolo)                                     🟢 tests/integration/stdio-auth.test.ts
 
 Transport: HTTP
-├── Arranque: node dist/server.js --http [--port 3000]                         🔴
-├── Health: GET /health → 200 { status, server, version }                      🔴
-├── MCP: POST /mcp → JSON-RPC sobre Streamable HTTP                            🔴
+├── Arranque: node dist/server.js --http [--port 3000]                         🟢 tests/integration/http-transport.test.ts
+├── Health: GET /health → 200 { status, server, version }                      🟢 tests/integration/http-transport.test.ts
+├── MCP: POST /mcp → JSON-RPC sobre Streamable HTTP                            🟢 tests/integration/http-transport.test.ts
 ├── Auth: Authorization: Bearer <key> header
-│   ├── Key válida → auth almacenada por sessionId                            🔴
-│   ├── Key inválida → 401 { error: "..." }                                   🔴
-│   └── Sin header → modo público                                             🔴
+│   ├── Key válida → auth almacenada por sessionId                            🟢 tests/integration/http-transport.test.ts
+│   ├── Key inválida → 401 { error: "..." }                                   🟢 tests/integration/http-transport.test.ts
+│   └── Sin header → modo público                                             🟢 tests/integration/http-transport.test.ts
 ├── Sessions
-│   ├── Nueva conexión → sessionId UUID                                       🔴
-│   ├── mcp-session-id header → reutiliza sesión                              🔴
-│   ├── onclose → cleanup transport + auth                                    🔴
-│   └── Auth se puede actualizar entre requests                               🔴
-└── 404: paths desconocidos → { error: "Not found..." }                       🔴
+│   ├── Nueva conexión → sessionId UUID                                       🟢 tests/integration/http-transport.test.ts
+│   ├── mcp-session-id header → reutiliza sesión                              🟢 tests/integration/http-transport.test.ts
+│   ├── onclose → cleanup transport + auth                                    🟡 (logic exists in server.ts; not directly tested)
+│   └── Auth se puede actualizar entre requests                               🟡 (logic exists in server.ts; not directly tested)
+└── 404: paths desconocidos → { error: "Not found..." }                       🟢 tests/integration/http-transport.test.ts
 
 OpenClaw Skill
-├── SKILL.md frontmatter YAML válido                                           🔴
-├── mcp-config.example.json funcional                                          🔴
-└── README con setup guide                                                     🔴
+├── SKILL.md frontmatter YAML válido                                           🟢 tests/openclaw-skill.test.ts
+├── mcp-config.example.json funcional                                          🟢 tests/openclaw-skill.test.ts
+└── README con setup guide                                                     🟡 (no separate README in openclaw-skill/)
 ```
 
 ---
