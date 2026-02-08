@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { initDatabase } from './db/index.js';
 import { getAdGuidelines } from './tools/consumer/get-guidelines.js';
+import { authenticate, extractKeyFromHeader, type AuthContext, AuthError } from './auth/middleware.js';
 
 // ─── CLI Args ────────────────────────────────────────────────────────────────
 
@@ -26,10 +27,36 @@ const port = portFlag !== -1 ? parseInt(args[portFlag + 1], 10) : 3000;
 const dbPathFlag = args.indexOf('--db');
 const dbPath = dbPathFlag !== -1 ? args[dbPathFlag + 1] : 'agentic-ads.db';
 
+const apiKeyFlag = args.indexOf('--api-key');
+const cliApiKey = apiKeyFlag !== -1 ? args[apiKeyFlag + 1] : process.env.AGENTIC_ADS_API_KEY;
+
 // ─── Database ────────────────────────────────────────────────────────────────
 
 const db = initDatabase(dbPath);
 console.error(`[agentic-ads] Database initialized at: ${dbPath}`);
+
+// ─── Auth Context ─────────────────────────────────────────────────────────────
+
+const sessionAuthMap = new Map<string, AuthContext>();
+const STDIO_SESSION_KEY = '__stdio__';
+
+/** Resolve auth for the current tool call. Returns null if no auth (public tools). */
+function getAuth(extra: { sessionId?: string }): AuthContext | null {
+  const key = extra.sessionId ?? STDIO_SESSION_KEY;
+  return sessionAuthMap.get(key) ?? null;
+}
+
+/** Require auth of a specific entity type. Throws MCP-friendly error on failure. */
+function requireAuth(extra: { sessionId?: string }, requiredType?: 'advertiser' | 'developer'): AuthContext {
+  const auth = getAuth(extra);
+  if (!auth) {
+    throw new Error('Authentication required. Provide an API key via Authorization header (HTTP) or --api-key flag (stdio).');
+  }
+  if (requiredType && auth.entity_type !== requiredType) {
+    throw new Error(`This tool requires ${requiredType} authentication, but you authenticated as ${auth.entity_type}.`);
+  }
+  return auth;
+}
 
 // ─── MCP Server ──────────────────────────────────────────────────────────────
 
@@ -136,8 +163,8 @@ server.tool(
     context_hash: z.string().optional().describe('Hash of the message containing the ad (for verification)'),
     metadata: z.record(z.unknown()).optional().describe('Additional event metadata'),
   },
-  async (params) => {
-    // TODO(#8, #12): Full implementation with budget manager and revenue split
+  async (params, extra) => {
+    const auth = requireAuth(extra, 'developer');
     const { getAdById, insertEvent, updateAdStats, updateCampaignSpent, updateCampaignStatus, getCampaignById } = await import('./db/index.js');
 
     const ad = getAdById(db, params.ad_id);
@@ -175,7 +202,7 @@ server.tool(
     const processEvent = db.transaction(() => {
       const event = insertEvent(db, {
         ad_id: params.ad_id,
-        developer_id: 'anonymous', // TODO(#13): Extract from auth context
+        developer_id: auth.entity_id,
         event_type: params.event_type,
         amount_charged: cost,
         developer_revenue: developerRevenue,
@@ -233,19 +260,12 @@ server.tool(
     start_date: z.string().optional().describe('Campaign start date (ISO format)'),
     end_date: z.string().optional().describe('Campaign end date (ISO format)'),
   },
-  async (params) => {
-    // TODO(#13): Extract advertiser_id from auth context
-    // For now, create or find a default advertiser
-    const { createCampaign, createAdvertiser } = await import('./db/index.js');
-
-    let advertiser = db.prepare('SELECT * FROM advertisers LIMIT 1').get() as { id: string } | undefined;
-    if (!advertiser) {
-      const newAdv = createAdvertiser(db, { name: 'Default Advertiser' });
-      advertiser = newAdv;
-    }
+  async (params, extra) => {
+    const auth = requireAuth(extra, 'advertiser');
+    const { createCampaign } = await import('./db/index.js');
 
     const campaign = createCampaign(db, {
-      advertiser_id: advertiser.id,
+      advertiser_id: auth.entity_id,
       name: params.name,
       objective: params.objective,
       total_budget: params.total_budget,
@@ -287,12 +307,16 @@ server.tool(
     geo: z.string().default('ALL').describe('Target country code or "ALL"'),
     language: z.string().default('en').describe('Target language code'),
   },
-  async (params) => {
+  async (params, extra) => {
+    const auth = requireAuth(extra, 'advertiser');
     const { createAd, getCampaignById } = await import('./db/index.js');
 
     const campaign = getCampaignById(db, params.campaign_id);
     if (!campaign) {
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign not found' }) }], isError: true };
+    }
+    if (campaign.advertiser_id !== auth.entity_id) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign does not belong to your account' }) }], isError: true };
     }
     if (campaign.status !== 'active') {
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign is not active' }) }], isError: true };
@@ -332,12 +356,16 @@ server.tool(
   {
     campaign_id: z.string().describe('Campaign ID to get analytics for'),
   },
-  async (params) => {
+  async (params, extra) => {
+    const auth = requireAuth(extra, 'advertiser');
     const { getCampaignById, getAdsByCampaign } = await import('./db/index.js');
 
     const campaign = getCampaignById(db, params.campaign_id);
     if (!campaign) {
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign not found' }) }], isError: true };
+    }
+    if (campaign.advertiser_id !== auth.entity_id) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign does not belong to your account' }) }], isError: true };
     }
 
     const ads = getAdsByCampaign(db, params.campaign_id);
@@ -396,6 +424,24 @@ server.tool(
 
 async function startStdio() {
   console.error('[agentic-ads] Starting in stdio mode...');
+
+  // Authenticate via CLI flag or env var
+  if (cliApiKey) {
+    try {
+      const auth = authenticate(db, cliApiKey);
+      sessionAuthMap.set(STDIO_SESSION_KEY, auth);
+      console.error(`[agentic-ads] Authenticated as ${auth.entity_type}: ${auth.entity_id}`);
+    } catch (err) {
+      if (err instanceof AuthError) {
+        console.error(`[agentic-ads] Auth failed: ${err.message}`);
+        process.exit(1);
+      }
+      throw err;
+    }
+  } else {
+    console.error('[agentic-ads] No API key provided — running without authentication (public tools only)');
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('[agentic-ads] MCP server running on stdio');
@@ -419,10 +465,30 @@ async function startHttp() {
 
     // MCP endpoint
     if (url.pathname === '/mcp') {
+      // Authenticate via Authorization header (if present)
+      const rawKey = extractKeyFromHeader(req.headers.authorization);
+      let auth: AuthContext | null = null;
+      if (rawKey) {
+        try {
+          auth = authenticate(db, rawKey);
+        } catch (err) {
+          if (err instanceof AuthError) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+            return;
+          }
+          throw err;
+        }
+      }
+
       // Check for existing session
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
       if (sessionId && transports.has(sessionId)) {
+        // Update auth for existing session (key might change between requests)
+        if (auth) {
+          sessionAuthMap.set(sessionId, auth);
+        }
         const transport = transports.get(sessionId)!;
         await transport.handleRequest(req, res);
         return;
@@ -436,6 +502,7 @@ async function startHttp() {
       transport.onclose = () => {
         if (transport.sessionId) {
           transports.delete(transport.sessionId);
+          sessionAuthMap.delete(transport.sessionId);
         }
       };
 
@@ -443,6 +510,9 @@ async function startHttp() {
 
       if (transport.sessionId) {
         transports.set(transport.sessionId, transport);
+        if (auth) {
+          sessionAuthMap.set(transport.sessionId, auth);
+        }
       }
 
       await transport.handleRequest(req, res);
