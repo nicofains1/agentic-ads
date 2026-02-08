@@ -1,2 +1,323 @@
-// Database module — TODO(#2): Implement SQLite schema and CRUD operations
-export {};
+// ──────────────────────────────────────────────────────────────────────────────
+// Database module — SQLite schema bootstrap and CRUD operations
+// ──────────────────────────────────────────────────────────────────────────────
+
+import Database from 'better-sqlite3';
+import crypto from 'node:crypto';
+import {
+  SCHEMA_SQL,
+  type Ad,
+  type AdRow,
+  type Advertiser,
+  type ApiKey,
+  type Campaign,
+  type Developer,
+  type Event,
+  type EventRow,
+} from './schema.js';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function parseAdRow(row: AdRow): Ad {
+  return {
+    ...row,
+    keywords: JSON.parse(row.keywords) as string[],
+    categories: JSON.parse(row.categories) as string[],
+  };
+}
+
+function parseEventRow(row: EventRow): Event {
+  return {
+    ...row,
+    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+  };
+}
+
+// ─── Database initialisation ─────────────────────────────────────────────────
+
+export function initDatabase(dbPath?: string): InstanceType<typeof Database> {
+  const db = new Database(dbPath ?? ':memory:');
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  db.exec(SCHEMA_SQL);
+  return db;
+}
+
+// ─── Advertisers ─────────────────────────────────────────────────────────────
+
+export function createAdvertiser(
+  db: InstanceType<typeof Database>,
+  data: { name: string; company?: string; email?: string },
+): Advertiser {
+  const id = crypto.randomUUID();
+  const stmt = db.prepare(
+    'INSERT INTO advertisers (id, name, company, email) VALUES (?, ?, ?, ?)',
+  );
+  stmt.run(id, data.name, data.company ?? null, data.email ?? null);
+  return db.prepare('SELECT * FROM advertisers WHERE id = ?').get(id) as Advertiser;
+}
+
+// ─── Developers ──────────────────────────────────────────────────────────────
+
+export function createDeveloper(
+  db: InstanceType<typeof Database>,
+  data: { name: string; email?: string },
+): Developer {
+  const id = crypto.randomUUID();
+  const stmt = db.prepare(
+    'INSERT INTO developers (id, name, email) VALUES (?, ?, ?)',
+  );
+  stmt.run(id, data.name, data.email ?? null);
+  return db.prepare('SELECT * FROM developers WHERE id = ?').get(id) as Developer;
+}
+
+// ─── Campaigns ───────────────────────────────────────────────────────────────
+
+export function createCampaign(
+  db: InstanceType<typeof Database>,
+  data: {
+    advertiser_id: string;
+    name: string;
+    objective: Campaign['objective'];
+    total_budget: number;
+    daily_budget?: number;
+    pricing_model: Campaign['pricing_model'];
+    bid_amount: number;
+    start_date?: string;
+    end_date?: string;
+  },
+): Campaign {
+  const id = crypto.randomUUID();
+  const stmt = db.prepare(`
+    INSERT INTO campaigns
+      (id, advertiser_id, name, objective, total_budget, daily_budget, pricing_model, bid_amount, start_date, end_date)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    id,
+    data.advertiser_id,
+    data.name,
+    data.objective,
+    data.total_budget,
+    data.daily_budget ?? null,
+    data.pricing_model,
+    data.bid_amount,
+    data.start_date ?? null,
+    data.end_date ?? null,
+  );
+  return db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id) as Campaign;
+}
+
+export function getCampaignById(
+  db: InstanceType<typeof Database>,
+  id: string,
+): Campaign | null {
+  return (db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id) as Campaign) ?? null;
+}
+
+export function getCampaignsByAdvertiser(
+  db: InstanceType<typeof Database>,
+  advertiser_id: string,
+): Campaign[] {
+  return db
+    .prepare('SELECT * FROM campaigns WHERE advertiser_id = ?')
+    .all(advertiser_id) as Campaign[];
+}
+
+export function updateCampaignSpent(
+  db: InstanceType<typeof Database>,
+  campaign_id: string,
+  amount: number,
+): void {
+  db.prepare('UPDATE campaigns SET spent = spent + ? WHERE id = ?').run(amount, campaign_id);
+}
+
+export function updateCampaignStatus(
+  db: InstanceType<typeof Database>,
+  campaign_id: string,
+  status: Campaign['status'],
+): void {
+  db.prepare('UPDATE campaigns SET status = ? WHERE id = ?').run(status, campaign_id);
+}
+
+// ─── Ads ─────────────────────────────────────────────────────────────────────
+
+export function createAd(
+  db: InstanceType<typeof Database>,
+  data: {
+    campaign_id: string;
+    creative_text: string;
+    link_url: string;
+    keywords: string[];
+    categories?: string[];
+    geo?: string;
+    language?: string;
+  },
+): Ad {
+  const id = crypto.randomUUID();
+  const stmt = db.prepare(`
+    INSERT INTO ads
+      (id, campaign_id, creative_text, link_url, keywords, categories, geo, language)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    id,
+    data.campaign_id,
+    data.creative_text,
+    data.link_url,
+    JSON.stringify(data.keywords),
+    JSON.stringify(data.categories ?? []),
+    data.geo ?? 'ALL',
+    data.language ?? 'en',
+  );
+  const row = db.prepare('SELECT * FROM ads WHERE id = ?').get(id) as AdRow;
+  return parseAdRow(row);
+}
+
+export function getAdById(
+  db: InstanceType<typeof Database>,
+  id: string,
+): Ad | null {
+  const row = db.prepare('SELECT * FROM ads WHERE id = ?').get(id) as AdRow | undefined;
+  return row ? parseAdRow(row) : null;
+}
+
+export function getAdsByCampaign(
+  db: InstanceType<typeof Database>,
+  campaign_id: string,
+): Ad[] {
+  const rows = db
+    .prepare('SELECT * FROM ads WHERE campaign_id = ?')
+    .all(campaign_id) as AdRow[];
+  return rows.map(parseAdRow);
+}
+
+export function getActiveAds(
+  db: InstanceType<typeof Database>,
+  filters?: { geo?: string; language?: string },
+): Ad[] {
+  let sql = `
+    SELECT a.*
+    FROM ads a
+    JOIN campaigns c ON a.campaign_id = c.id
+    WHERE a.status = 'active'
+      AND c.status = 'active'
+      AND c.spent < c.total_budget
+  `;
+  const params: unknown[] = [];
+
+  if (filters?.geo) {
+    sql += " AND (a.geo = 'ALL' OR a.geo = ?)";
+    params.push(filters.geo);
+  }
+  if (filters?.language) {
+    sql += ' AND a.language = ?';
+    params.push(filters.language);
+  }
+
+  const rows = db.prepare(sql).all(...params) as AdRow[];
+  return rows.map(parseAdRow);
+}
+
+export function updateAdStats(
+  db: InstanceType<typeof Database>,
+  ad_id: string,
+  event_type: 'impression' | 'click' | 'conversion',
+  spend_amount: number,
+): void {
+  const column =
+    event_type === 'impression'
+      ? 'impressions'
+      : event_type === 'click'
+        ? 'clicks'
+        : 'conversions';
+
+  db.prepare(`UPDATE ads SET ${column} = ${column} + 1, spend = spend + ? WHERE id = ?`).run(
+    spend_amount,
+    ad_id,
+  );
+}
+
+// ─── Events ──────────────────────────────────────────────────────────────────
+
+export function insertEvent(
+  db: InstanceType<typeof Database>,
+  data: {
+    ad_id: string;
+    developer_id: string;
+    event_type: Event['event_type'];
+    amount_charged: number;
+    developer_revenue: number;
+    platform_revenue: number;
+    context_hash?: string;
+    metadata?: Record<string, unknown>;
+  },
+): Event {
+  const id = crypto.randomUUID();
+  const stmt = db.prepare(`
+    INSERT INTO events
+      (id, ad_id, developer_id, event_type, amount_charged, developer_revenue, platform_revenue, context_hash, metadata)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    id,
+    data.ad_id,
+    data.developer_id,
+    data.event_type,
+    data.amount_charged,
+    data.developer_revenue,
+    data.platform_revenue,
+    data.context_hash ?? null,
+    JSON.stringify(data.metadata ?? {}),
+  );
+  const row = db.prepare('SELECT * FROM events WHERE id = ?').get(id) as EventRow;
+  return parseEventRow(row);
+}
+
+export function getEventsByAd(
+  db: InstanceType<typeof Database>,
+  ad_id: string,
+): Event[] {
+  const rows = db.prepare('SELECT * FROM events WHERE ad_id = ?').all(ad_id) as EventRow[];
+  return rows.map(parseEventRow);
+}
+
+export function getDailySpent(
+  db: InstanceType<typeof Database>,
+  campaign_id: string,
+): number {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(e.amount_charged), 0) AS total
+       FROM events e
+       JOIN ads a ON e.ad_id = a.id
+       WHERE a.campaign_id = ?
+         AND e.created_at >= ?`,
+    )
+    .get(campaign_id, today) as { total: number };
+  return row.total;
+}
+
+// ─── API Keys ────────────────────────────────────────────────────────────────
+
+export function createApiKey(
+  db: InstanceType<typeof Database>,
+  data: { key_hash: string; entity_type: ApiKey['entity_type']; entity_id: string },
+): ApiKey {
+  const id = crypto.randomUUID();
+  const stmt = db.prepare(
+    'INSERT INTO api_keys (id, key_hash, entity_type, entity_id) VALUES (?, ?, ?, ?)',
+  );
+  stmt.run(id, data.key_hash, data.entity_type, data.entity_id);
+  return db.prepare('SELECT * FROM api_keys WHERE id = ?').get(id) as ApiKey;
+}
+
+export function findApiKey(
+  db: InstanceType<typeof Database>,
+  key_hash: string,
+): ApiKey | null {
+  return (
+    (db.prepare('SELECT * FROM api_keys WHERE key_hash = ?').get(key_hash) as ApiKey) ?? null
+  );
+}
