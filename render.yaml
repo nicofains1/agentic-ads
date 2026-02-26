@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: agentic-ads
+    runtime: node
+    plan: free
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.js --http --port 3000
+    envVars:
+      - key: NODE_VERSION
+        value: 22.0.0
+      - key: PORT
+        value: 3000
+    healthCheckPath: /health
