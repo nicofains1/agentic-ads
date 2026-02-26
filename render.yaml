@@ -5,10 +5,8 @@ services:
     plan: free
     env: node
     buildCommand: npm install && npm run build
-    startCommand: node dist/server.js --http --port 3000
+    startCommand: node dist/server.js --http --port $PORT
     envVars:
       - key: NODE_VERSION
         value: 22.0.0
-      - key: PORT
-        value: 3000
     healthCheckPath: /health
