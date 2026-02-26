@@ -591,12 +591,13 @@ async function startHttp() {
 
     // MCP server card for marketplace discovery (Smithery, etc.)
     if (url.pathname === '/.well-known/mcp/server-card.json') {
+      const publicBase = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${port}`;
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         name: 'agentic-ads',
         description: 'Ad network for AI agents — monetize MCP servers with contextual ads. 70% revenue share for developers.',
         version: '0.1.0',
-        url: `http://localhost:${port}/mcp`,
+        url: `${publicBase}/mcp`,
         transport: { type: 'streamable-http', url: '/mcp' },
         tools: [
           { name: 'search_ads', description: 'Search for relevant ads by query, keywords, category, or geo' },
