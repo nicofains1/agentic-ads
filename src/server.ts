@@ -591,7 +591,9 @@ async function startHttp() {
 
     // MCP server card for marketplace discovery (Smithery, etc.)
     if (url.pathname === '/.well-known/mcp/server-card.json') {
-      const publicBase = process.env.RENDER_EXTERNAL_URL ?? `http://localhost:${port}`;
+      const host = req.headers.host;
+      const proto = req.headers['x-forwarded-proto'] === 'https' ? 'https' : (host?.includes('localhost') ? 'http' : 'https');
+      const publicBase = host ? `${proto}://${host}` : `http://localhost:${port}`;
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         name: 'agentic-ads',
