@@ -589,6 +589,29 @@ async function startHttp() {
   const httpServer = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`);
 
+    // MCP server card for marketplace discovery (Smithery, etc.)
+    if (url.pathname === '/.well-known/mcp/server-card.json') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        name: 'agentic-ads',
+        description: 'Ad network for AI agents — monetize MCP servers with contextual ads. 70% revenue share for developers.',
+        version: '0.1.0',
+        url: `http://localhost:${port}/mcp`,
+        transport: { type: 'streamable-http', url: '/mcp' },
+        tools: [
+          { name: 'search_ads', description: 'Search for relevant ads by query, keywords, category, or geo' },
+          { name: 'report_event', description: 'Report impression, click, or conversion events' },
+          { name: 'get_ad_guidelines', description: 'Get ad formatting guidelines for agents' },
+          { name: 'create_campaign', description: 'Create an advertising campaign with budget and pricing model' },
+          { name: 'create_ad', description: 'Create an ad with creative, keywords, and targeting' },
+          { name: 'get_campaign_analytics', description: 'Get campaign performance metrics' },
+          { name: 'update_campaign', description: 'Update campaign fields, pause or resume' },
+          { name: 'list_campaigns', description: 'List all campaigns with summary stats' }
+        ]
+      }));
+      return;
+    }
+
     // Health check
     if (url.pathname === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
