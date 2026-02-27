@@ -12,7 +12,7 @@ import { mkdtempSync, unlinkSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { initDatabase, createAdvertiser, createDeveloper } from '../../src/db/index.js';
+import { initDatabase, createAdvertiser, createDeveloper, createCampaign, createAd, insertEvent } from '../../src/db/index.js';
 import { generateApiKey } from '../../src/auth/middleware.js';
 
 const SERVER_PATH = resolve('dist/server.js');
@@ -74,7 +74,7 @@ describe('MCP Integration: stdio transport', () => {
   // ─── Tool Listing ──────────────────────────────────────────────────────────
 
   describe('Tool listing', () => {
-    it('lists all 8 tools', async () => {
+    it('lists all 9 tools', async () => {
       const client = await createMcpClient(dbPath, advKey);
       try {
         const tools = await client.listTools();
@@ -84,6 +84,7 @@ describe('MCP Integration: stdio transport', () => {
           'create_campaign',
           'get_ad_guidelines',
           'get_campaign_analytics',
+          'get_developer_earnings',
           'list_campaigns',
           'report_event',
           'search_ads',
@@ -658,6 +659,132 @@ describe('MCP Integration: stdio transport', () => {
       const { data, isError } = parseToolResult(result);
       expect(isError).toBe(true);
       expect(data.error).toBe('Ad not found');
+    });
+  });
+
+  // ─── get_developer_earnings ────────────────────────────────────────────────
+
+  describe('get_developer_earnings via MCP', () => {
+    let client: Client;
+
+    beforeAll(async () => {
+      // Seed campaign + ad + events directly in DB (faster, avoids multi-process issues)
+      const { createCampaign, createAd, insertEvent } = await import('../../src/db/index.js');
+      const db = initDatabase(dbPath);
+
+      const campaign = createCampaign(db, {
+        advertiser_id: advertiserId,
+        name: 'Earnings Test Campaign',
+        objective: 'traffic',
+        total_budget: 100,
+        pricing_model: 'cpc',
+        bid_amount: 0.50,
+      });
+
+      const ad = createAd(db, {
+        campaign_id: campaign.id,
+        creative_text: 'Test ad for developer earnings',
+        link_url: 'https://example.com',
+        keywords: ['test', 'earnings'],
+      });
+
+      // 1 impression (free on CPC) + 1 click ($0.35 dev revenue)
+      insertEvent(db, {
+        ad_id: ad.id,
+        developer_id: developerId,
+        event_type: 'impression',
+        amount_charged: 0,
+        developer_revenue: 0,
+        platform_revenue: 0,
+      });
+      insertEvent(db, {
+        ad_id: ad.id,
+        developer_id: developerId,
+        event_type: 'click',
+        amount_charged: 0.50,
+        developer_revenue: 0.35,
+        platform_revenue: 0.15,
+      });
+
+      db.close();
+
+      client = await createMcpClient(dbPath, devKey);
+    });
+
+    afterAll(async () => {
+      await client.close();
+    });
+
+    it('returns earnings summary with correct structure', async () => {
+      const result = await client.callTool({
+        name: 'get_developer_earnings',
+        arguments: {},
+      });
+      const { data, isError } = parseToolResult(result);
+      expect(isError).toBeFalsy();
+
+      // Top-level fields
+      expect(typeof data.total_earnings).toBe('number');
+      expect(typeof data.total_impressions).toBe('number');
+      expect(typeof data.total_clicks).toBe('number');
+      expect(typeof data.total_conversions).toBe('number');
+      expect(Array.isArray(data.earnings_by_campaign)).toBe(true);
+      expect(data.period_earnings).toBeDefined();
+    });
+
+    it('correctly counts events and calculates revenue', async () => {
+      const result = await client.callTool({
+        name: 'get_developer_earnings',
+        arguments: {},
+      });
+      const { data } = parseToolResult(result);
+
+      // We reported 1 impression + 1 click on a CPC $0.50 campaign
+      // impression: $0 cost, click: $0.50 * 0.70 = $0.35 dev revenue
+      expect(data.total_impressions).toBeGreaterThanOrEqual(1);
+      expect(data.total_clicks).toBeGreaterThanOrEqual(1);
+      expect(data.total_earnings).toBeGreaterThan(0);
+
+      // earnings_by_campaign should include our campaign
+      const campaigns = data.earnings_by_campaign as Array<Record<string, unknown>>;
+      const ourCampaign = campaigns.find((c) => c.campaign_name === 'Earnings Test Campaign');
+      expect(ourCampaign).toBeDefined();
+      expect(ourCampaign!.revenue).toBeGreaterThan(0);
+      expect(typeof ourCampaign!.advertiser_name).toBe('string');
+    });
+
+    it('returns period earnings structure', async () => {
+      const result = await client.callTool({
+        name: 'get_developer_earnings',
+        arguments: {},
+      });
+      const { data } = parseToolResult(result);
+      const period = data.period_earnings as Record<string, number>;
+      expect(typeof period.last_24h).toBe('number');
+      expect(typeof period.last_7d).toBe('number');
+      expect(typeof period.last_30d).toBe('number');
+      expect(typeof period.all_time).toBe('number');
+      // Recent events should appear in last_24h
+      expect(period.last_24h).toBeGreaterThan(0);
+      expect(period.all_time).toBeGreaterThanOrEqual(period.last_24h);
+    });
+
+    it('rejects unauthenticated access', async () => {
+      // Build a client with the advertiser key — should get wrong auth type error
+      const advClient = await createMcpClient(dbPath, advKey);
+      try {
+        const result = await advClient.callTool({
+          name: 'get_developer_earnings',
+          arguments: {},
+        });
+        const content = result.content as Array<{ type: string; text: string }>;
+        const text = content[0]?.text ?? '';
+        expect(
+          result.isError === true || text.includes('developer authentication') || text.includes('error'),
+        ).toBe(true);
+      } finally {
+        await advClient.close();
+      }
     });
   });
 
