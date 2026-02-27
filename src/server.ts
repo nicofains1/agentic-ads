@@ -662,6 +662,101 @@ server.tool(
   },
 );
 
+// ─── Developer Tools ──────────────────────────────────────────────────────────
+
+server.tool(
+  'get_developer_earnings',
+  'Get earnings summary for the authenticated developer: total revenue, event counts, per-campaign breakdown, and period-based earnings (24h, 7d, 30d, all-time).',
+  {},
+  async (_params, extra) => {
+    logToolCall('get_developer_earnings', extra.sessionId);
+    const auth = requireAuth(extra, 'developer');
+    checkRateLimit(extra, 'get_developer_earnings');
+
+    const developerId = auth.entity_id;
+
+    // All-time totals
+    const totals = db.prepare(`
+      SELECT
+        COALESCE(SUM(developer_revenue), 0)                                          AS total_earnings,
+        COALESCE(SUM(CASE WHEN event_type = 'impression' THEN 1 ELSE 0 END), 0)     AS total_impressions,
+        COALESCE(SUM(CASE WHEN event_type = 'click'      THEN 1 ELSE 0 END), 0)     AS total_clicks,
+        COALESCE(SUM(CASE WHEN event_type = 'conversion' THEN 1 ELSE 0 END), 0)     AS total_conversions
+      FROM events
+      WHERE developer_id = ?
+    `).get(developerId) as {
+      total_earnings: number;
+      total_impressions: number;
+      total_clicks: number;
+      total_conversions: number;
+    };
+
+    // Per-campaign breakdown (join events → ads → campaigns → advertisers)
+    const earningsByCampaign = db.prepare(`
+      SELECT
+        c.name          AS campaign_name,
+        adv.name        AS advertiser_name,
+        COALESCE(SUM(CASE WHEN e.event_type = 'impression' THEN 1 ELSE 0 END), 0)  AS impressions,
+        COALESCE(SUM(CASE WHEN e.event_type = 'click'      THEN 1 ELSE 0 END), 0)  AS clicks,
+        COALESCE(SUM(CASE WHEN e.event_type = 'conversion' THEN 1 ELSE 0 END), 0)  AS conversions,
+        COALESCE(SUM(e.developer_revenue), 0)                                       AS revenue
+      FROM events e
+      JOIN ads       a   ON e.ad_id        = a.id
+      JOIN campaigns c   ON a.campaign_id  = c.id
+      JOIN advertisers adv ON c.advertiser_id = adv.id
+      WHERE e.developer_id = ?
+      GROUP BY c.id
+      ORDER BY revenue DESC
+    `).all(developerId) as Array<{
+      campaign_name: string;
+      advertiser_name: string;
+      impressions: number;
+      clicks: number;
+      conversions: number;
+      revenue: number;
+    }>;
+
+    // Period-based earnings helper — use SQLite-compatible datetime format (space separator, no T/Z)
+    function sqliteDatetime(d: Date): string {
+      return d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
+    }
+
+    function earningsSince(dt: Date): number {
+      const row = db.prepare(`
+        SELECT COALESCE(SUM(developer_revenue), 0) AS total
+        FROM events
+        WHERE developer_id = ?
+          AND created_at >= ?
+      `).get(developerId, sqliteDatetime(dt)) as { total: number };
+      return row.total;
+    }
+
+    const now = new Date();
+    const periodEarnings = {
+      last_24h: earningsSince(new Date(now.getTime() - 24 * 60 * 60 * 1000)),
+      last_7d:  earningsSince(new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000)),
+      last_30d: earningsSince(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)),
+      all_time: totals.total_earnings,
+    };
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            total_earnings:       totals.total_earnings,
+            total_impressions:    totals.total_impressions,
+            total_clicks:         totals.total_clicks,
+            total_conversions:    totals.total_conversions,
+            earnings_by_campaign: earningsByCampaign,
+            period_earnings:      periodEarnings,
+          }, null, 2),
+        },
+      ],
+    };
+  },
+);
+
 } // end registerTools
 
 // ─── Transport & Startup ─────────────────────────────────────────────────────
@@ -721,7 +816,8 @@ async function startHttp() {
           { name: 'create_ad', description: 'Create an ad with creative, keywords, and targeting' },
           { name: 'get_campaign_analytics', description: 'Get campaign performance metrics' },
           { name: 'update_campaign', description: 'Update campaign fields, pause or resume' },
-          { name: 'list_campaigns', description: 'List all campaigns with summary stats' }
+          { name: 'list_campaigns', description: 'List all campaigns with summary stats' },
+          { name: 'get_developer_earnings', description: 'Get developer earnings, impressions, clicks, conversions by campaign and period' }
         ]
       }));
       return;
