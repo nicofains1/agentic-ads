@@ -26,7 +26,7 @@ Stay updated on new releases, marketplace listings, and partnership opportunitie
 - 📖 [Documentation](https://github.com/nicofains1/agentic-ads/blob/main/README.md)
 - 🐛 [Report a Bug](https://github.com/nicofains1/agentic-ads/issues/new?template=bug_report.md)
 - ✨ [Request a Feature](https://github.com/nicofains1/agentic-ads/issues/new?template=feature_request.md)
-- 🚀 [Live Demo](https://agentic-ads.onrender.com)
+- 🚀 [Live Demo](https://agentic-ads.fly.dev)
 - 🔧 [MCP Registry Listing](https://github.com/modelcontextprotocol/servers/tree/main/src/agentic-ads)
 
 ---
