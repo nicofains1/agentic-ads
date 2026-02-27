@@ -1,6 +1,7 @@
 {
   "name": "agentic-ads",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "mcpName": "io.github.nicofains1/agentic-ads",
   "description": "MCP server for advertising in AI agent conversations",
   "type": "module",
   "main": "dist/server.js",
