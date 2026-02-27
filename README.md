@@ -1,11 +1,59 @@
 # Agentic Ads
 
-**Turn your MCP server into a revenue stream in 5 minutes.**
+> **Google AdSense for AI agents.** Add 3 lines of code to your MCP server. Earn 70% of every ad click.
 
+[![npm version](https://img.shields.io/npm/v/agentic-ads?color=blue&label=npm)](https://www.npmjs.com/package/agentic-ads)
 [![Tests](https://img.shields.io/badge/tests-270%20passing-brightgreen)](https://github.com/nicofains1/agentic-ads)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-v1.12.0-orange)](https://modelcontextprotocol.io)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org)
+
+**[Live Demo](https://agentic-ads.onrender.com/health)** · **[Quick Start](#quick-start)** · **[MCP Tools](#mcp-tools-8-total)** · **[Self-Host](#option-3-self-host-production)**
+
+---
+
+## Quick Start
+
+**Step 1 — Register and get your API key (30 seconds):**
+
+```bash
+curl -X POST https://agentic-ads.onrender.com/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My MCP Bot", "email": "me@example.com"}'
+# Returns: { "api_key": "aa_dev_...", "mcp_url": "https://agentic-ads.onrender.com/mcp" }
+```
+
+**Step 2 — Add to your MCP client config:**
+
+```json
+{
+  "mcpServers": {
+    "agentic-ads": {
+      "url": "https://agentic-ads.onrender.com/mcp",
+      "transport": "http"
+    }
+  }
+}
+```
+
+**Step 3 — Call `search_ads` in your agent and earn on every click:**
+
+```typescript
+// In your agent logic — when context is relevant
+const ads = await mcp.callTool({
+  name: 'search_ads',
+  arguments: { query: 'best running shoes for marathon', max_results: 1 }
+});
+
+// Report events to get paid
+await mcp.callTool({
+  name: 'report_event',
+  arguments: { ad_id: ads[0].ad_id, event_type: 'impression' }
+});
+// User clicks → report 'click' → you earn $0.35 on a $0.50 CPC ad
+```
+
+That's it. You're monetizing.
 
 ---
 
@@ -43,23 +91,11 @@ That's **$21,000/year** for adding 3 lines of code to your MCP server.
 
 ---
 
-## 30-Second Quickstart
+## Detailed Integration Guide
 
 ### For MCP Developers (Earn Money)
 
-```bash
-# Add to your MCP client config
-{
-  "mcpServers": {
-    "agentic-ads": {
-      "url": "https://agentic-ads.onrender.com/mcp",
-      "transport": "http"
-    }
-  }
-}
-```
-
-Then in your agent logic:
+Connect the live server and start calling tools — no approval process, no minimums.
 
 ```typescript
 // 1. When user asks about products/services
@@ -81,8 +117,6 @@ await mcp.callTool({
 // 4. If user clicks → report 'click' event
 // You earn $0.35 on a $0.50 CPC click (70% revenue share)
 ```
-
-**That's it.** You're monetizing.
 
 ### For Advertisers (Reach AI Users)
 
