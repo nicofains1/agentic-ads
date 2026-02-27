@@ -39,8 +39,9 @@ console.error(`[agentic-ads] Database initialized at: ${dbPath}`);
 // ─── Auto-Seed Production DB ─────────────────────────────────────────────────
 
 function autoSeed() {
-  const count = (db.prepare('SELECT COUNT(*) as c FROM advertisers').get() as { c: number }).c;
-  if (count > 0) return; // Already seeded
+  const advCount = (db.prepare('SELECT COUNT(*) as c FROM advertisers').get() as { c: number }).c;
+  const devCount = (db.prepare('SELECT COUNT(*) as c FROM developers').get() as { c: number }).c;
+  if (advCount > 0 || devCount > 0) return; // Already seeded or pre-populated
 
   console.error('[agentic-ads] Empty database detected — auto-seeding production campaigns...');
 
@@ -180,6 +181,14 @@ function createMcpServer(): McpServer {
   return server;
 }
 
+/** Log every MCP tool invocation with timestamp and auth context. */
+function logToolCall(toolName: string, sessionId?: string): void {
+  const ts = new Date().toISOString();
+  const auth = sessionId ? sessionAuthMap.get(sessionId) : sessionAuthMap.get(STDIO_SESSION_KEY);
+  const developerInfo = auth ? ` developer_id=${auth.entity_id} (${auth.entity_type})` : ' unauthenticated';
+  console.error(`[agentic-ads] tool=${toolName} ts=${ts} session=${sessionId ?? 'stdio'}${developerInfo}`);
+}
+
 function registerTools(server: McpServer): void {
 
 // ─── Consumer Tools ──────────────────────────────────────────────────────────
@@ -188,7 +197,8 @@ server.tool(
   'get_ad_guidelines',
   'Get formatting guidelines for how to present sponsored ads naturally in agent responses',
   {},
-  async () => {
+  async (_params, extra) => {
+    logToolCall('get_ad_guidelines', extra.sessionId);
     const guidelines = getAdGuidelines();
     return {
       content: [
@@ -215,6 +225,7 @@ server.tool(
     max_results: z.number().min(1).max(10).default(3).describe('Max ads to return'),
   },
   async (params, extra) => {
+    logToolCall('search_ads', extra.sessionId);
     checkRateLimit(extra, 'search_ads');
     const { matchAds, rankAds } = await import('./matching/index.js');
     const { getActiveAds } = await import('./db/index.js');
@@ -281,6 +292,7 @@ server.tool(
     metadata: z.record(z.unknown()).optional().describe('Additional event metadata'),
   },
   async (params, extra) => {
+    logToolCall('report_event', extra.sessionId);
     const auth = requireAuth(extra, 'developer');
     checkRateLimit(extra, 'report_event');
     const { getAdById, insertEvent, updateAdStats, updateCampaignSpent, updateCampaignStatus, getCampaignById } = await import('./db/index.js');
@@ -379,6 +391,7 @@ server.tool(
     end_date: z.string().optional().describe('Campaign end date (ISO format)'),
   },
   async (params, extra) => {
+    logToolCall('create_campaign', extra.sessionId);
     const auth = requireAuth(extra, 'advertiser');
     checkRateLimit(extra, 'create_campaign');
     const { createCampaign } = await import('./db/index.js');
@@ -427,6 +440,7 @@ server.tool(
     language: z.string().default('en').describe('Target language code'),
   },
   async (params, extra) => {
+    logToolCall('create_ad', extra.sessionId);
     const auth = requireAuth(extra, 'advertiser');
     checkRateLimit(extra, 'create_ad');
     const { createAd, getCampaignById } = await import('./db/index.js');
@@ -477,6 +491,7 @@ server.tool(
     campaign_id: z.string().describe('Campaign ID to get analytics for'),
   },
   async (params, extra) => {
+    logToolCall('get_campaign_analytics', extra.sessionId);
     const auth = requireAuth(extra, 'advertiser');
     checkRateLimit(extra, 'get_campaign_analytics');
     const { getCampaignById, getAdsByCampaign } = await import('./db/index.js');
@@ -556,6 +571,7 @@ server.tool(
     end_date: z.string().optional().describe('New end date (ISO format)'),
   },
   async (params, extra) => {
+    logToolCall('update_campaign', extra.sessionId);
     const auth = requireAuth(extra, 'advertiser');
     checkRateLimit(extra, 'update_campaign');
     const { getCampaignById, updateCampaign } = await import('./db/index.js');
@@ -609,6 +625,7 @@ server.tool(
     status: z.enum(['draft', 'active', 'paused', 'completed']).optional().describe('Filter by campaign status'),
   },
   async (params, extra) => {
+    logToolCall('list_campaigns', extra.sessionId);
     const auth = requireAuth(extra, 'advertiser');
     checkRateLimit(extra, 'list_campaigns');
     const { listCampaigns } = await import('./db/index.js');
@@ -757,6 +774,8 @@ async function startHttp() {
           if (auth) {
             sessionAuthMap.set(sid, auth);
           }
+          const authInfo = auth ? ` authenticated as ${auth.entity_type}:${auth.entity_id}` : ' unauthenticated';
+          console.error(`[agentic-ads] New MCP session: ${sid}${authInfo} ts=${new Date().toISOString()}`);
         },
       });
 
@@ -773,9 +792,70 @@ async function startHttp() {
       return;
     }
 
+    // ─── REST: POST /api/register ─────────────────────────────────────────────
+    if (url.pathname === '/api/register' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        let parsed: { name?: unknown; email?: unknown };
+        try {
+          parsed = JSON.parse(body) as { name?: unknown; email?: unknown };
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+          return;
+        }
+
+        const name = parsed.name;
+        const email = parsed.email;
+
+        // Validate name (required)
+        if (!name || typeof name !== 'string' || name.trim() === '') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'name is required' }));
+          return;
+        }
+
+        // Validate email format (required)
+        if (!email || typeof email !== 'string') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'email is required' }));
+          return;
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid email format' }));
+          return;
+        }
+
+        try {
+          const developer = createDeveloper(db, { name: name.trim(), email });
+          const apiKey = generateApiKey(db, 'developer', developer.id);
+          const host = req.headers.host;
+          const proto = req.headers['x-forwarded-proto'] === 'https' ? 'https' : (host?.includes('localhost') ? 'http' : 'https');
+          const publicBase = host ? `${proto}://${host}` : `http://localhost:${port}`;
+
+          console.error(`[agentic-ads] New developer registered: ${name.trim()} <${email}> (id: ${developer.id})`);
+
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            developer_id: developer.id,
+            api_key: apiKey,
+            mcp_url: `${publicBase}/mcp`,
+          }));
+        } catch (err) {
+          console.error('[agentic-ads] Registration error:', err);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Registration failed' }));
+        }
+      });
+      return;
+    }
+
     // 404 for anything else
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found. Use /mcp for MCP protocol or /health for health check.' }));
+    res.end(JSON.stringify({ error: 'Not found. Use /mcp for MCP protocol, /health for health check, or POST /api/register to create a developer account.' }));
   });
 
   httpServer.listen(port, () => {

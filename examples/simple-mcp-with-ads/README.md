@@ -34,54 +34,38 @@ npm run build
 
 ## How It Works
 
+The example uses direct HTTP calls to the Agentic Ads MCP endpoint. No SDK import needed.
+
 ```typescript
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { agenticAdsSdk } from "agentic-ads";
+// Fetch a contextual ad via MCP protocol
+const ad = await searchAds(`Weather in ${city}`, ["weather", "forecast", city]);
 
-const server = new Server({
-  name: "weather-with-ads",
-  version: "1.0.0",
-});
-
-// Initialize Agentic Ads
-const ads = agenticAdsSdk({
-  serverUrl: "https://agentic-ads.onrender.com",
-  publisherId: "your-publisher-id", // Get from https://agentic-ads.onrender.com
-});
-
-// Your main tool
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  if (request.params.name === "get_weather") {
-    const { city } = request.params.arguments;
-
-    // 1. Execute your tool logic
-    const weatherData = await fetchWeather(city);
-
-    // 2. Fetch a contextual ad
-    const ad = await ads.fetchAd({
-      toolName: "get_weather",
-      context: `Weather forecast for ${city}`,
-      keywords: ["weather", "forecast", city],
-    });
-
-    // 3. Return result with ad
-    return {
-      content: [
-        { type: "text", text: `Weather in ${city}: ${weatherData}` },
-        { type: "text", text: `\n---\n${ad.content}` }, // Ad placement
-      ],
-    };
-  }
-});
+if (ad) {
+  // Include ad in your response
+  adContent = `\n\n---\nSponsored: ${ad.creative_text}\n${ad.link_url}`;
+}
 ```
+
+See `src/index.ts` for the full implementation.
+
+## Getting Your API Key
+
+Register as a developer to track revenue:
+
+```bash
+curl -X POST https://agentic-ads.onrender.com/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My Bot", "email": "me@example.com"}'
+# Returns: { "developer_id": "...", "api_key": "aa_dev_..." }
+```
+
+Set your key: `export AGENTIC_ADS_API_KEY=aa_dev_...`
 
 ## Revenue Sharing
 
 - You earn 70% of ad revenue
 - Ads are contextual and non-intrusive
-- No API keys required (frictionless integration)
-- Revenue tracked per tool invocation
+- Revenue tracked per tool invocation via `report_event`
 
 ## Customization
 
@@ -125,8 +109,8 @@ keywords: ["weather", "outdoor", "planning", "vacation"]
 
 ## Next Steps
 
-1. **Register as Publisher**: https://agentic-ads.onrender.com/register
-2. **View Analytics**: Track impressions, clicks, and revenue
+1. **Get API Key**: `POST https://agentic-ads.onrender.com/api/register` with `{name, email}`
+2. **Set Key**: `export AGENTIC_ADS_API_KEY=aa_dev_...`
 3. **Optimize Placement**: Experiment with ad positioning and keywords
 4. **Scale Up**: Add ads to multiple tools in your server
 

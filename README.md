@@ -156,8 +156,8 @@ mcp.callTool({ name: 'get_campaign_analytics', arguments: { campaign_id: 1 } });
 ### 2. Zero Setup Friction
 
 - No contracts, no minimums, no approval delays
-- Add 1 MCP server to your config → start earning
-- Test with demo keys, go live in 5 minutes
+- Register in seconds via `POST /api/register` → get your API key
+- Add 1 MCP server to your config → start earning in 5 minutes
 
 ### 3. Privacy-Respecting
 
@@ -217,6 +217,31 @@ Choose how you want to pay (advertisers) or earn (developers):
 
 ---
 
+## Getting Your API Key
+
+To call `report_event` or advertiser tools, you need an API key. Register via the REST endpoint:
+
+```bash
+curl -X POST https://agentic-ads.onrender.com/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My MCP Bot", "email": "me@example.com"}'
+```
+
+Response:
+```json
+{
+  "developer_id": "...",
+  "api_key": "aa_dev_...",
+  "mcp_url": "https://agentic-ads.onrender.com/mcp"
+}
+```
+
+Use the `api_key` in the `Authorization` header: `Authorization: Bearer aa_dev_...`
+
+> **Note on Render free tier:** The live server at `agentic-ads.onrender.com` runs on Render's free tier, which spins down after 15 minutes of inactivity. Cold starts may take 15-30 seconds. The SQLite database is ephemeral — data resets on each deploy. For persistent data, self-host the server (Option 3 below) or use a paid Render plan.
+
+---
+
 ## Installation
 
 ### Option 1: Connect to Live Server (Easiest)
@@ -266,13 +291,24 @@ PORT=19877 npm run start:http
 npm run start:stdio
 ```
 
+**Flags:**
+
+```bash
+node dist/server.js --http --port 19877 --db ./ads.db
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--http` | — | Start HTTP server (default is stdio) |
+| `--port N` | `3000` | HTTP port |
+| `--db PATH` | `agentic-ads.db` | SQLite database path |
+| `--api-key KEY` | — | Pre-authenticate stdio sessions |
+
 **Environment Variables:**
 
 ```bash
-PORT=19877              # HTTP server port
-DB_PATH=./ads.db        # SQLite database path
-API_KEY_DEV=your-key    # Developer API key (optional)
-API_KEY_ADV=your-key    # Advertiser API key (optional)
+PORT=19877                     # HTTP server port (alternative to --port)
+AGENTIC_ADS_API_KEY=aa_dev_... # Developer API key for stdio mode
 ```
 
 ---
@@ -381,8 +417,12 @@ cd agentic-ads
 # Install + build
 npm install && npm run build
 
-# Run smoke test (creates demo advertiser + developer + campaign + ad)
-tsx scripts/smoke-test.ts --db test.db --dev-key demo-dev --adv-key demo-adv
+# Seed a local DB with demo data (generates real API keys)
+tsx scripts/seed.ts --db test.db
+# Note: seed.ts prints the generated dev/adv keys — use them below
+
+# Run smoke test with real keys from seed output
+tsx scripts/smoke-test.ts --db test.db --dev-key aa_dev_... --adv-key aa_adv_...
 ```
 
 **Output:**
@@ -404,8 +444,17 @@ tsx scripts/smoke-test.ts --db test.db --dev-key demo-dev --adv-key demo-adv
 
 ### For Developers
 
-**Q: How do I get API keys?**
-A: For testing, use `demo-dev` / `demo-adv`. For production, run `npm run seed` to generate real keys, or contact us.
+**Q: How do I get an API key?**
+A: Register via the REST endpoint:
+
+```bash
+curl -X POST https://agentic-ads.onrender.com/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Your Name", "email": "you@example.com"}'
+# Returns: { "developer_id": "...", "api_key": "aa_dev_...", "mcp_url": "..." }
+```
+
+Use the returned `api_key` as `Authorization: Bearer aa_dev_...` in your MCP requests.
 
 **Q: Do I HAVE to show ads?**
 A: No. You control which ads to show. Only show ads if they genuinely add value to the user. Agent autonomy is a feature.
