@@ -238,7 +238,7 @@ Response:
 
 Use the `api_key` in the `Authorization` header: `Authorization: Bearer aa_dev_...`
 
-> **Note on Render free tier:** The live server at `agentic-ads.onrender.com` runs on Render's free tier, which spins down after 15 minutes of inactivity. Cold starts may take 15-30 seconds. The SQLite database is ephemeral — data resets on each deploy. For persistent data, self-host the server (Option 3 below) or use a paid Render plan.
+> **Note on Render free tier:** The live server at `agentic-ads.onrender.com` runs on Render's free tier, which spins down after 15 minutes of inactivity. Cold starts may take 15-30 seconds. The SQLite database is ephemeral on the free tier — data resets on each deploy. **For persistent data**, deploy to [Fly.io](DEPLOY.md) (free, persistent volume) or self-host with `DATABASE_PATH=/data/ads.db` pointing to a mounted volume.
 
 ---
 
@@ -308,8 +308,11 @@ node dist/server.js --http --port 19877 --db ./ads.db
 
 ```bash
 PORT=19877                     # HTTP server port (alternative to --port)
+DATABASE_PATH=/data/ads.db     # SQLite database path (default: agentic-ads.db)
 AGENTIC_ADS_API_KEY=aa_dev_... # Developer API key for stdio mode
 ```
+
+**DB Persistence:** Set `DATABASE_PATH` to a path on a persistent volume. On first run with an empty DB, demo campaigns are auto-seeded. See [DEPLOY.md](DEPLOY.md) for full deployment guide (Fly.io recommended for free persistent storage).
 
 ---
 
