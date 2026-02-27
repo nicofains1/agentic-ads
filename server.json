@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.nicofains1/agentic-ads",
+  "title": "Agentic Ads",
+  "description": "Ad network for AI agents — monetize MCP servers with contextual ads. 70% revenue share.",
+  "version": "0.1.1",
+  "repository": {
+    "url": "https://github.com/nicofains1/agentic-ads",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "agentic-ads",
+      "version": "0.1.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "node"
+    }
+  ],
+  "remotes": [
+    {
+      "transportType": "streamable-http",
+      "url": "https://agentic-ads.onrender.com/mcp"
+    }
+  ]
+}
