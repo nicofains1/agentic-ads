@@ -477,6 +477,12 @@ tsx scripts/smoke-test.ts --db test.db --dev-key aa_dev_... --adv-key aa_adv_...
 
 ---
 
+## How Developers Get Paid
+
+When your MCP server reports a click event on a CPC ad, 70% of the bid goes to you — tracked atomically in our database. Once your balance reaches **$10**, email `payouts@agentic-ads.com` with your developer_id and your preferred payment method (PayPal or USDC on Polygon). We verify your balance and send payment within 5 business days. Automated Stripe payouts are on the roadmap for when the network scales.
+
+---
+
 ## FAQ
 
 ### For Developers
