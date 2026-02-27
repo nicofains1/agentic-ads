@@ -53,7 +53,7 @@ See `src/index.ts` for the full implementation.
 Register as a developer to track revenue:
 
 ```bash
-curl -X POST https://agentic-ads.onrender.com/api/register \
+curl -X POST https://agentic-ads.fly.dev/api/register \
   -H "Content-Type: application/json" \
   -d '{"name": "My Bot", "email": "me@example.com"}'
 # Returns: { "developer_id": "...", "api_key": "aa_dev_..." }
@@ -109,7 +109,7 @@ keywords: ["weather", "outdoor", "planning", "vacation"]
 
 ## Next Steps
 
-1. **Get API Key**: `POST https://agentic-ads.onrender.com/api/register` with `{name, email}`
+1. **Get API Key**: `POST https://agentic-ads.fly.dev/api/register` with `{name, email}`
 2. **Set Key**: `export AGENTIC_ADS_API_KEY=aa_dev_...`
 3. **Optimize Placement**: Experiment with ad positioning and keywords
 4. **Scale Up**: Add ads to multiple tools in your server

@@ -8,7 +8,7 @@
 [![MCP](https://img.shields.io/badge/MCP-v1.12.0-orange)](https://modelcontextprotocol.io)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org)
 
-**[Live Demo](https://agentic-ads.onrender.com/health)** · **[Quick Start](#quick-start)** · **[MCP Tools](#mcp-tools-8-total)** · **[Self-Host](#option-3-self-host-production)**
+**[Live Demo](https://agentic-ads.fly.dev/health)** · **[Quick Start](#quick-start)** · **[MCP Tools](#mcp-tools-8-total)** · **[Self-Host](#option-3-self-host-production)**
 
 ---
 
@@ -17,10 +17,10 @@
 **Step 1 — Register and get your API key (30 seconds):**
 
 ```bash
-curl -X POST https://agentic-ads.onrender.com/api/register \
+curl -X POST https://agentic-ads.fly.dev/api/register \
   -H "Content-Type: application/json" \
   -d '{"name": "My MCP Bot", "email": "me@example.com"}'
-# Returns: { "api_key": "aa_dev_...", "mcp_url": "https://agentic-ads.onrender.com/mcp" }
+# Returns: { "api_key": "aa_dev_...", "mcp_url": "https://agentic-ads.fly.dev/mcp" }
 ```
 
 **Step 2 — Add to your MCP client config:**
@@ -29,7 +29,7 @@ curl -X POST https://agentic-ads.onrender.com/api/register \
 {
   "mcpServers": {
     "agentic-ads": {
-      "url": "https://agentic-ads.onrender.com/mcp",
+      "url": "https://agentic-ads.fly.dev/mcp",
       "transport": "http"
     }
   }
@@ -256,7 +256,7 @@ Choose how you want to pay (advertisers) or earn (developers):
 To call `report_event` or advertiser tools, you need an API key. Register via the REST endpoint:
 
 ```bash
-curl -X POST https://agentic-ads.onrender.com/api/register \
+curl -X POST https://agentic-ads.fly.dev/api/register \
   -H "Content-Type: application/json" \
   -d '{"name": "My MCP Bot", "email": "me@example.com"}'
 ```
@@ -266,13 +266,13 @@ Response:
 {
   "developer_id": "...",
   "api_key": "aa_dev_...",
-  "mcp_url": "https://agentic-ads.onrender.com/mcp"
+  "mcp_url": "https://agentic-ads.fly.dev/mcp"
 }
 ```
 
 Use the `api_key` in the `Authorization` header: `Authorization: Bearer aa_dev_...`
 
-> **Note on Render free tier:** The live server at `agentic-ads.onrender.com` runs on Render's free tier, which spins down after 15 minutes of inactivity. Cold starts may take 15-30 seconds. The SQLite database is ephemeral on the free tier — data resets on each deploy. **For persistent data**, deploy to [Fly.io](DEPLOY.md) (free, persistent volume) or self-host with `DATABASE_PATH=/data/ads.db` pointing to a mounted volume.
+> **Deployed on Fly.io with persistent storage:** The live server at `agentic-ads.fly.dev` runs on Fly.io with a persistent volume — data is preserved across deploys and restarts. No cold-start spin-down issues. To self-host, deploy to [Fly.io](DEPLOY.md) or use `DATABASE_PATH=/data/ads.db` pointing to a mounted volume.
 
 ---
 
@@ -286,14 +286,14 @@ Add to your MCP client config (Claude Desktop, Cursor, Windsurf, etc.):
 {
   "mcpServers": {
     "agentic-ads": {
-      "url": "https://agentic-ads.onrender.com/mcp",
+      "url": "https://agentic-ads.fly.dev/mcp",
       "transport": "http"
     }
   }
 }
 ```
 
-**Health check:** https://agentic-ads.onrender.com/health
+**Health check:** https://agentic-ads.fly.dev/health
 
 ### Option 2: Local stdio (Development)
 
@@ -373,7 +373,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "agentic-ads": {
-      "url": "https://agentic-ads.onrender.com/mcp",
+      "url": "https://agentic-ads.fly.dev/mcp",
       "transport": "http"
     }
   }
@@ -485,7 +485,7 @@ tsx scripts/smoke-test.ts --db test.db --dev-key aa_dev_... --adv-key aa_adv_...
 A: Register via the REST endpoint:
 
 ```bash
-curl -X POST https://agentic-ads.onrender.com/api/register \
+curl -X POST https://agentic-ads.fly.dev/api/register \
   -H "Content-Type: application/json" \
   -d '{"name": "Your Name", "email": "you@example.com"}'
 # Returns: { "developer_id": "...", "api_key": "aa_dev_...", "mcp_url": "..." }
@@ -500,7 +500,7 @@ A: No. You control which ads to show. Only show ads if they genuinely add value 
 A: Follow the guidelines from `get_ad_guidelines`: max 1-2 ads per response, always disclose "sponsored", respect opt-out ("no ads please").
 
 **Q: Is this production-ready?**
-A: Yes. 270 passing tests, live at https://agentic-ads.onrender.com, MIT license.
+A: Yes. 270 passing tests, live at https://agentic-ads.fly.dev, MIT license.
 
 **Q: What MCP clients are supported?**
 A: Any MCP client supporting stdio or Streamable HTTP. Tested with Claude Desktop, Cursor, Windsurf, custom agents.
@@ -535,7 +535,7 @@ A: Yes, MIT license. Fork it, self-host it, contribute to it.
 ## Roadmap
 
 - [x] **MVP** — 8 MCP tools, keyword matching, billing, auth, 270 tests
-- [x] **Deployed** — Live at https://agentic-ads.onrender.com
+- [x] **Deployed** — Live at https://agentic-ads.fly.dev
 - [ ] **Marketplace Listings** — Submit to Anthropic Registry, Smithery, Glama, PulseMCP (Week 1)
 - [ ] **Dashboard REST API** — Web UI for advertisers/developers ([#40](https://github.com/nicofains1/agentic-ads/issues/40))
 - [ ] **Fraud Detection** — Anomaly heuristics ([#47](https://github.com/nicofains1/agentic-ads/issues/47))
@@ -601,6 +601,6 @@ And you — the MCP developer — earn 70% of the revenue for being the intermed
 
 **Built with** [Model Context Protocol (MCP)](https://modelcontextprotocol.io) — the open standard for connecting AI agents to tools.
 
-**Live demo:** [https://agentic-ads.onrender.com](https://agentic-ads.onrender.com)
+**Live demo:** [https://agentic-ads.fly.dev](https://agentic-ads.fly.dev)
 
 **Get started:** Add the MCP server to your config, earn your first dollar this week.

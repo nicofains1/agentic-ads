@@ -16,13 +16,13 @@ import {
  * 3. Return contextual ads with tool responses
  *
  * Setup:
- *   1. Register at https://agentic-ads.onrender.com/api/register (POST with {name, email})
+ *   1. Register at https://agentic-ads.fly.dev/api/register (POST with {name, email})
  *      → Returns your developer API key (aa_dev_...)
  *   2. Set AGENTIC_ADS_API_KEY env var to your key
  *   3. npm run build && node build/index.js
  */
 
-const AGENTIC_ADS_SERVER = "https://agentic-ads.onrender.com";
+const AGENTIC_ADS_SERVER = "https://agentic-ads.fly.dev";
 const DEVELOPER_API_KEY = process.env.AGENTIC_ADS_API_KEY ?? "";
 
 // ─── Agentic Ads HTTP Client ──────────────────────────────────────────────────
@@ -229,7 +229,7 @@ async function main() {
   if (!DEVELOPER_API_KEY) {
     console.error(
       "[weather-with-ads] AGENTIC_ADS_API_KEY not set — ads will show without revenue tracking.\n" +
-      "[weather-with-ads] Register at: POST https://agentic-ads.onrender.com/api/register\n" +
+      "[weather-with-ads] Register at: POST https://agentic-ads.fly.dev/api/register\n" +
       "[weather-with-ads] Body: { \"name\": \"Your Name\", \"email\": \"you@example.com\" }",
     );
   }
