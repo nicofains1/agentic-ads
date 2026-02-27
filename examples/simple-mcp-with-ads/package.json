@@ -1,0 +1,29 @@
+{
+  "name": "mcp-weather-with-ads-example",
+  "version": "1.0.0",
+  "description": "Simple MCP server demonstrating Agentic Ads integration",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "agentic-ads",
+    "example",
+    "weather"
+  ],
+  "author": "Agentic Ads",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "agentic-ads": "^0.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}
