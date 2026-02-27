@@ -7,9 +7,9 @@ import { createServer } from 'node:http';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 
-import { initDatabase } from './db/index.js';
+import { initDatabase, createAdvertiser, createDeveloper, createCampaign, createAd } from './db/index.js';
 import { getAdGuidelines } from './tools/consumer/get-guidelines.js';
-import { authenticate, extractKeyFromHeader, type AuthContext, AuthError } from './auth/middleware.js';
+import { authenticate, extractKeyFromHeader, generateApiKey, type AuthContext, AuthError } from './auth/middleware.js';
 import { RateLimiter, RateLimitError } from './auth/rate-limiter.js';
 
 // ─── CLI Args ────────────────────────────────────────────────────────────────
@@ -35,6 +35,100 @@ const cliApiKey = apiKeyFlag !== -1 ? args[apiKeyFlag + 1] : process.env.AGENTIC
 
 const db = initDatabase(dbPath);
 console.error(`[agentic-ads] Database initialized at: ${dbPath}`);
+
+// ─── Auto-Seed Production DB ─────────────────────────────────────────────────
+
+function autoSeed() {
+  const count = (db.prepare('SELECT COUNT(*) as c FROM advertisers').get() as { c: number }).c;
+  if (count > 0) return; // Already seeded
+
+  console.error('[agentic-ads] Empty database detected — auto-seeding production campaigns...');
+
+  // OnlySwaps — Web3 token swapper
+  const onlyswaps = createAdvertiser(db, {
+    name: 'OnlySwaps',
+    company: 'OnlySwaps',
+    email: 'hello@onlyswaps.io',
+  });
+  const osKey = generateApiKey(db, 'advertiser', onlyswaps.id);
+  const osCampaign = createCampaign(db, {
+    advertiser_id: onlyswaps.id,
+    name: 'OnlySwaps — Swap Smarter',
+    objective: 'traffic',
+    total_budget: 500,
+    daily_budget: 20,
+    pricing_model: 'cpc',
+    bid_amount: 0.25,
+    start_date: '2026-01-01',
+    end_date: '2026-12-31',
+  });
+  createAd(db, {
+    campaign_id: osCampaign.id,
+    creative_text: 'OnlySwaps — Swap tokens across DEXs at the best rates. Zero slippage, lightning fast, multichain. The smart way to trade crypto.',
+    link_url: 'https://github.com/0xKoaj/onlyswaps',
+    keywords: ['crypto', 'swap', 'defi', 'web3', 'tokens', 'trading', 'dex', 'ethereum', 'blockchain'],
+    categories: ['finance', 'crypto', 'web3'],
+    geo: 'ALL',
+    language: 'en',
+  });
+  createAd(db, {
+    campaign_id: osCampaign.id,
+    creative_text: 'Tired of bad swap rates? OnlySwaps aggregates DEXs to find the best price. Flashloan arbitrage included. Open source.',
+    link_url: 'https://github.com/0xKoaj/onlyswaps',
+    keywords: ['arbitrage', 'flashloan', 'uniswap', 'sushiswap', 'token swap', 'crypto trading'],
+    categories: ['finance', 'crypto', 'defi'],
+    geo: 'ALL',
+    language: 'en',
+  });
+
+  // Agentic Ads — our own product
+  const agads = createAdvertiser(db, {
+    name: 'Agentic Ads',
+    company: 'Agentic Ads',
+    email: 'hello@agentic-ads.com',
+  });
+  const agKey = generateApiKey(db, 'advertiser', agads.id);
+  const agCampaign = createCampaign(db, {
+    advertiser_id: agads.id,
+    name: 'Monetize Your MCP Server',
+    objective: 'conversions',
+    total_budget: 500,
+    daily_budget: 20,
+    pricing_model: 'cpc',
+    bid_amount: 0.30,
+    start_date: '2026-01-01',
+    end_date: '2026-12-31',
+  });
+  createAd(db, {
+    campaign_id: agCampaign.id,
+    creative_text: 'Monetize your MCP server in 5 minutes. Add contextual ads to your AI agent tools and earn 70% revenue share. Free to integrate.',
+    link_url: 'https://github.com/nicofains1/agentic-ads',
+    keywords: ['mcp', 'monetization', 'ai agents', 'mcp server', 'revenue', 'advertising', 'model context protocol'],
+    categories: ['developer-tools', 'ai', 'monetization'],
+    geo: 'ALL',
+    language: 'en',
+  });
+  createAd(db, {
+    campaign_id: agCampaign.id,
+    creative_text: 'Your MCP server has users but no revenue? Agentic Ads is like AdSense for AI agents. 8 MCP tools, 5-minute setup, 70/30 split.',
+    link_url: 'https://github.com/nicofains1/agentic-ads',
+    keywords: ['mcp tools', 'ai monetization', 'developer revenue', 'adsense for ai', 'mcp marketplace'],
+    categories: ['developer-tools', 'ai', 'advertising'],
+    geo: 'ALL',
+    language: 'en',
+  });
+
+  // Demo developer for consumers to test
+  const demo = createDeveloper(db, { name: 'DemoBot', email: 'demo@agentic-ads.com' });
+  const devKey = generateApiKey(db, 'developer', demo.id);
+
+  console.error('[agentic-ads] Auto-seed complete:');
+  console.error(`  OnlySwaps advertiser key: ${osKey}`);
+  console.error(`  Agentic Ads advertiser key: ${agKey}`);
+  console.error(`  DemoBot developer key: ${devKey}`);
+}
+
+autoSeed();
 
 // ─── Auth Context ─────────────────────────────────────────────────────────────
 
