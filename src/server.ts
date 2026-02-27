@@ -26,7 +26,8 @@ const portFlag = args.indexOf('--port');
 const port = portFlag !== -1 ? parseInt(args[portFlag + 1], 10) : 3000;
 
 const dbPathFlag = args.indexOf('--db');
-const dbPath = dbPathFlag !== -1 ? args[dbPathFlag + 1] : 'agentic-ads.db';
+// Priority: --db CLI flag > DATABASE_PATH env var > default file
+const dbPath = dbPathFlag !== -1 ? args[dbPathFlag + 1] : (process.env.DATABASE_PATH ?? 'agentic-ads.db');
 
 const apiKeyFlag = args.indexOf('--api-key');
 const cliApiKey = apiKeyFlag !== -1 ? args[apiKeyFlag + 1] : process.env.AGENTIC_ADS_API_KEY;
