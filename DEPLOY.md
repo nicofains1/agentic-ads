@@ -1,84 +1,95 @@
 # Deployment Guide — agentic-ads
 
-## Option 1: Railway (Recommended — CLI Available)
+## DB Persistence
 
-Railway is already installed on this machine. Free tier includes:
-- 500 hours/month execution time
-- $5 free credit monthly
-- Zero config needed with Nixpacks
+SQLite database is stored at the path set by `DATABASE_PATH` env var (default: `agentic-ads.db`).
 
-### Deploy Steps:
-
-```bash
-cd /Users/nfainstein/Software-Development/agentic-ads
-
-# Login to Railway (opens browser for auth)
-railway login
-
-# Create new project
-railway init
-
-# Deploy (builds and deploys automatically)
-railway up
-
-# Get the public URL
-railway domain
+For production, mount a persistent volume at `/data` and set:
+```
+DATABASE_PATH=/data/agentic-ads.db
 ```
 
-Expected output: Public URL like `https://agentic-ads-production.up.railway.app`
+The server reads this env var at startup (priority: `--db` CLI flag > `DATABASE_PATH` env > `agentic-ads.db`).
 
-### Cost: $0 (free tier)
-
----
-
-## Option 2: Render.com (Web UI)
-
-Free tier includes:
-- 750 hours/month
-- No credit card required
-- Auto-deploys from GitHub
-
-### Deploy Steps:
-
-1. Go to https://dashboard.render.com
-2. Click "New +" → "Web Service"
-3. Connect GitHub account and select `nicofains1/agentic-ads` repo
-4. Use branch: `deploy/render-free-tier`
-5. Render auto-detects `render.yaml` config
-6. Click "Create Web Service"
-
-Render will build and deploy automatically. You'll get a URL like:
-`https://agentic-ads.onrender.com`
-
-### Cost: $0 (free tier)
+On first startup with an empty DB, the server **auto-seeds** production campaigns (OnlySwaps + Agentic Ads). No manual seed step needed.
 
 ---
 
-## Option 3: Fly.io (Install Required)
+## Option 1: Fly.io (Recommended — Free, Persistent Storage)
 
-Free tier includes:
-- 3 shared-cpu VMs
-- 256MB RAM per VM
-- 3GB persistent storage
+Fly.io free tier includes:
+- 3 shared-cpu VMs, 256MB RAM
+- 3GB persistent volume storage
+- `fly.toml` already configured in this repo
 
 ### Deploy Steps:
 
 ```bash
-# Install Fly CLI
+# Install Fly CLI if not installed
 curl -L https://fly.io/install.sh | sh
 
-# Login
+# Login (opens browser)
 flyctl auth login
 
-# Launch (interactive setup)
-cd /Users/nfainstein/Software-Development/agentic-ads
-flyctl launch --name agentic-ads
-
-# Deploy
+# First deploy — creates app and volume
+cd /path/to/agentic-ads
+flyctl launch --name agentic-ads --no-deploy
+flyctl volumes create agentic_ads_data --region iad --size 1
 flyctl deploy
+
+# Get the public URL
+flyctl status
+```
+
+Expected URL: `https://agentic-ads.fly.dev`
+
+### Subsequent deploys:
+
+```bash
+npm run build && flyctl deploy
 ```
 
 ### Cost: $0 (free tier)
+
+---
+
+## Option 2: Railway (CLI Available — BLOCKED by free plan resource limit)
+
+Railway is installed and authenticated on this machine, but the free plan resource limit is exceeded.
+
+To unblock: upgrade Railway plan, or delete an unused Railway project to free up resources.
+
+Once unblocked:
+
+```bash
+cd /path/to/agentic-ads
+
+# Create project
+railway init --name agentic-ads
+
+# Create volume for persistent DB (1GB, mounted at /data)
+railway volume create --mount /data --size 1
+
+# Set DATABASE_PATH
+railway variables set DATABASE_PATH=/data/agentic-ads.db
+
+# Deploy
+railway up
+```
+
+`railway.toml` is already configured with Nixpacks builder and health check.
+
+### Cost: $0 (free tier — when resource limit allows)
+
+---
+
+## Option 3: Render.com (No Persistent Storage on Free Tier)
+
+Render free tier wipes the filesystem on every deploy. SQLite data is lost.
+
+**Workaround (not recommended):** The auto-seed feature means a fresh DB on every deploy still has demo campaigns. Advertisers would need to re-register after each deploy.
+
+**For true persistence on Render:** Add a Render Disk ($7/month).
 
 ---
 
@@ -95,8 +106,10 @@ Expected response:
 {"status":"ok","server":"agentic-ads","version":"0.1.0"}
 ```
 
-## Database
+## Environment Variables
 
-SQLite database will be initialized on first run. On Railway/Render free tiers, the database is ephemeral (resets on deploy). For persistent storage, upgrade to paid plan ($5-7/month) with mounted volumes.
-
-For MVP testing, ephemeral is acceptable.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_PATH` | `agentic-ads.db` | Path to SQLite database file |
+| `PORT` | `3000` | HTTP port (set automatically by Railway/Fly.io) |
+| `AGENTIC_ADS_API_KEY` | — | Optional default API key for stdio mode |
