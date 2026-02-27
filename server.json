@@ -22,7 +22,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://agentic-ads.onrender.com/mcp"
+      "url": "https://agentic-ads.fly.dev/mcp"
     }
   ]
 }
