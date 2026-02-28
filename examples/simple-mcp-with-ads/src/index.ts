@@ -105,7 +105,12 @@ async function searchAds(query: string, keywords?: string[]): Promise<AdResult |
       }),
     });
 
-    const searchData = await searchRes.json() as { result?: { content?: Array<{ text: string }> } };
+    // Handle both plain JSON and SSE (text/event-stream) responses
+    const searchText = await searchRes.text();
+    const dataLine = searchText.split('\n').find((l: string) => l.startsWith('data:'));
+    const searchData = dataLine
+      ? JSON.parse(dataLine.slice(5).trim()) as { result?: { content?: Array<{ text: string }> } }
+      : JSON.parse(searchText) as { result?: { content?: Array<{ text: string }> } };
     const content = searchData?.result?.content?.[0]?.text;
     if (!content) return null;
 
@@ -114,37 +119,6 @@ async function searchAds(query: string, keywords?: string[]): Promise<AdResult |
   } catch (error) {
     console.error("Agentic Ads search failed:", error);
     return null;
-  }
-}
-
-/** Report an ad event (impression, click, conversion). */
-async function reportEvent(
-  adId: string,
-  eventType: "impression" | "click" | "conversion",
-  sessionId: string,
-): Promise<void> {
-  if (!DEVELOPER_API_KEY) return; // Can't report without auth
-  try {
-    await fetch(`${AGENTIC_ADS_SERVER}/mcp`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream",
-        "mcp-session-id": sessionId,
-        "Authorization": `Bearer ${DEVELOPER_API_KEY}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 3,
-        method: "tools/call",
-        params: {
-          name: "report_event",
-          arguments: { ad_id: adId, event_type: eventType },
-        },
-      }),
-    });
-  } catch (error) {
-    console.error("Agentic Ads event reporting failed:", error);
   }
 }
 
