@@ -1,24 +1,17 @@
-FROM node:22-alpine
-
+FROM node:22-alpine AS builder
 WORKDIR /app
+COPY package*.json tsconfig.json ./
+COPY src ./src
+RUN npm ci && npm run build
 
-# Copy package files
+FROM node:22-alpine
+WORKDIR /app
 COPY package*.json ./
-
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy built files
-COPY dist ./dist
-
-# Copy startup script
-COPY scripts/start.sh ./scripts/start.sh
-RUN chmod +x scripts/start.sh
-
-# SQLite database will be stored in /data (persistent volume mount point)
+RUN apk add --no-cache python3 make g++ && \
+    npm ci --only=production && \
+    apk del python3 make g++
+COPY --from=builder /app/dist ./dist
 RUN mkdir -p /data
 ENV DATABASE_PATH=/data/agentic-ads.db
-
 EXPOSE 3000
-
-CMD ["sh", "scripts/start.sh"]
+CMD ["node", "dist/server.js", "--http"]
