@@ -32,6 +32,9 @@ const dbPath = dbPathFlag !== -1 ? args[dbPathFlag + 1] : (process.env.DATABASE_
 const apiKeyFlag = args.indexOf('--api-key');
 const cliApiKey = apiKeyFlag !== -1 ? args[apiKeyFlag + 1] : process.env.AGENTIC_ADS_API_KEY;
 
+// ─── Security Constants ──────────────────────────────────────────────────────
+const MAX_BODY_SIZE = 10 * 1024; // 10KB max for POST bodies
+
 // ─── Database ────────────────────────────────────────────────────────────────
 
 const db = initDatabase(dbPath);
@@ -306,6 +309,20 @@ server.tool(
     const campaign = getCampaignById(db, ad.campaign_id);
     if (!campaign || campaign.status !== 'active') {
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign not active' }) }], isError: true };
+    }
+
+    // Event deduplication: reject duplicate (developer_id, ad_id, event_type) within window
+    // Impressions: 60s, clicks: 5min, conversions: 1h
+    const dedupWindows: Record<string, number> = { impression: 60, click: 300, conversion: 3600 };
+    const dedupSeconds = dedupWindows[params.event_type] ?? 60;
+    const recentDupe = db.prepare(`
+      SELECT id FROM events
+      WHERE developer_id = ? AND ad_id = ? AND event_type = ?
+        AND created_at >= datetime('now', '-' || ? || ' seconds')
+      LIMIT 1
+    `).get(auth.entity_id, params.ad_id, params.event_type, dedupSeconds) as { id: string } | undefined;
+    if (recentDupe) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Duplicate event — already reported recently', existing_event_id: recentDupe.id }) }], isError: true };
     }
 
     // Calculate cost based on pricing model
@@ -891,9 +908,32 @@ async function startHttp() {
 
     // ─── REST: POST /api/register ─────────────────────────────────────────────
     if (url.pathname === '/api/register' && req.method === 'POST') {
+      // IP-based rate limiting (5 registrations per hour per IP)
+      const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ?? req.socket.remoteAddress ?? 'unknown';
+      const regRateResult = rateLimiter.check(clientIp, '__register');
+      if (!regRateResult.allowed) {
+        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': String(Math.ceil((regRateResult.retryAfterMs ?? 1000) / 1000)) });
+        res.end(JSON.stringify({ error: 'Too many registrations. Try again later.' }));
+        return;
+      }
+
+      // Read body with size limit
       let body = '';
-      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      let bodyTooLarge = false;
+      req.on('data', (chunk: Buffer) => {
+        body += chunk.toString();
+        if (body.length > MAX_BODY_SIZE) {
+          bodyTooLarge = true;
+          req.destroy();
+        }
+      });
       req.on('end', () => {
+        if (bodyTooLarge) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Request body too large (max 10KB)' }));
+          return;
+        }
+
         let parsed: { name?: unknown; email?: unknown };
         try {
           parsed = JSON.parse(body) as { name?: unknown; email?: unknown };
