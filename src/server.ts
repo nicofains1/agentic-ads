@@ -27,7 +27,9 @@ const mode = args.includes('--stdio')
     : 'stdio';
 
 const portFlag = args.indexOf('--port');
-const port = portFlag !== -1 ? parseInt(args[portFlag + 1], 10) : 3000;
+const port = portFlag !== -1
+  ? parseInt(args[portFlag + 1], 10)
+  : parseInt(process.env.PORT ?? '3000', 10) || 3000;
 
 const dbPathFlag = args.indexOf('--db');
 // Priority: --db CLI flag > DATABASE_PATH env var > default file
