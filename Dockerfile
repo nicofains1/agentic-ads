@@ -1,15 +1,24 @@
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files + source
+COPY package*.json tsconfig.json ./
+COPY src ./src
+
+# Install ALL deps (including devDependencies for build) and build
+RUN npm ci && npm run build
+
+# ─── Production stage ────────────────────────────────────────────────────────
 FROM node:22-alpine
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
 RUN npm ci --only=production
 
-# Copy built files
-COPY dist ./dist
+# Copy built files from builder
+COPY --from=builder /app/dist ./dist
 
 # Copy startup script
 COPY scripts/start.sh ./scripts/start.sh
