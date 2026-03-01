@@ -16,6 +16,7 @@ export interface VerificationResult {
     token_in?: string;
     token_out?: string;
     referrer_address?: string;
+    swapper_address?: string;
     block_number?: number;
     timestamp?: number;
   };
@@ -88,15 +89,23 @@ export async function verifyConversion(
       return { verified: false, status: 'rejected', reason: 'Transaction failed (reverted)' };
     }
 
-    // Check recency (~1 hour window, ~1800 blocks on Polygon, ~300 on Ethereum)
+    // Check recency — MANDATORY (return pending if RPC fails)
     const currentBlock = await getCurrentBlockNumber(rpcUrl, timeoutMs);
-    if (currentBlock) {
-      const txBlock = parseInt(receipt.blockNumber, 16);
-      const blockDiff = currentBlock - txBlock;
-      // Allow generous window: 7200 blocks (~2 hours on most chains)
-      if (blockDiff > 7200) {
-        return { verified: false, status: 'rejected', reason: `Transaction too old (${blockDiff} blocks ago)` };
-      }
+    if (!currentBlock) {
+      return { verified: false, status: 'pending', reason: 'Could not verify block recency (RPC failed)' };
+    }
+    const txBlock = parseInt(receipt.blockNumber, 16);
+    const blockDiff = currentBlock - txBlock;
+    // Allow generous window: 7200 blocks (~2 hours on most chains)
+    if (blockDiff > 7200) {
+      return { verified: false, status: 'rejected', reason: `Transaction too old (${blockDiff} blocks ago)` };
+    }
+
+    // Anti-fraud: reject self-swaps (tx sender === referrer)
+    const referrerLower = expectedReferrer.toLowerCase();
+    const swapperAddress = receipt.from?.toLowerCase();
+    if (swapperAddress === referrerLower) {
+      return { verified: false, status: 'rejected', reason: 'Self-swap detected: transaction sender cannot be the referrer' };
     }
 
     // Check contract interaction (if specified)
@@ -109,11 +118,9 @@ export async function verifyConversion(
       }
     }
 
-    // Check for referrer in event logs
-    const referrerLower = expectedReferrer.toLowerCase();
+    // Check for referrer in event logs (NOT tx.from — must be in contract events)
     const referrerPadded = '0x' + referrerLower.slice(2).padStart(64, '0');
 
-    // Look for referrer address in any indexed topic or log data
     const hasReferrer = receipt.logs.some(log => {
       // Check indexed topics (topics[1], topics[2], topics[3])
       const inTopics = log.topics.some(topic =>
@@ -125,13 +132,7 @@ export async function verifyConversion(
       return inTopics || inData;
     });
 
-    // Also check if the tx sender or recipient matches referrer
-    // (some swap patterns don't emit referrer in events but use it as tx.from)
-    const isFromReferrer = receipt.from?.toLowerCase() === referrerLower;
-
-    if (!hasReferrer && !isFromReferrer) {
-      // If no referrer found in logs or sender, check if ANY swap event exists
-      // This is a softer check — we verify the swap happened but can't confirm attribution
+    if (!hasReferrer) {
       const hasSwapEvent = receipt.logs.some(log =>
         log.topics[0] === FEE_COLLECTED_TOPIC ||
         log.topics[0] === SWAP_EXECUTED_TOPIC
@@ -141,15 +142,14 @@ export async function verifyConversion(
         return { verified: false, status: 'rejected', reason: 'No swap event found in transaction' };
       }
 
-      // Swap happened but referrer not found — might be a legitimate swap without referral tracking
-      // For now, reject — referral attribution is required for verified conversions
       return { verified: false, status: 'rejected', reason: 'Swap found but referrer address not in transaction logs' };
     }
 
-    // Extract swap details from logs if available
+    // Extract swap details from logs
     const details = extractSwapDetails(receipt);
     details.referrer_address = expectedReferrer;
-    details.block_number = parseInt(receipt.blockNumber, 16);
+    details.swapper_address = swapperAddress;
+    details.block_number = txBlock;
 
     return {
       verified: true,
