@@ -6,14 +6,19 @@ import Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 import {
   SCHEMA_SQL,
+  MIGRATION_V2_SQL,
+  CHAIN_CONFIGS_SEED,
   type Ad,
   type AdRow,
   type Advertiser,
   type ApiKey,
   type Campaign,
+  type CampaignRow,
+  type ChainConfig,
   type Developer,
   type Event,
   type EventRow,
+  type VerificationStatus,
 } from './schema.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -26,10 +31,18 @@ function parseAdRow(row: AdRow): Ad {
   };
 }
 
+function parseCampaignRow(row: CampaignRow): Campaign {
+  return {
+    ...row,
+    chain_ids: JSON.parse(row.chain_ids) as number[],
+  };
+}
+
 function parseEventRow(row: EventRow): Event {
   return {
     ...row,
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+    verification_details: JSON.parse(row.verification_details) as Record<string, unknown>,
   };
 }
 
@@ -40,7 +53,34 @@ export function initDatabase(dbPath?: string): InstanceType<typeof Database> {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA_SQL);
+  migrateToV2(db);
+  seedChainConfigs(db);
   return db;
+}
+
+/** Idempotent migration: add V2 columns if they don't exist yet. */
+function migrateToV2(db: InstanceType<typeof Database>): void {
+  const devCols = (db.pragma('table_info(developers)') as Array<{ name: string }>).map(c => c.name);
+  if (devCols.includes('wallet_address')) return; // Already migrated
+
+  // Run each ALTER TABLE individually (SQLite doesn't support multi-ALTER)
+  for (const stmt of MIGRATION_V2_SQL.split(';')) {
+    const trimmed = stmt.trim();
+    if (trimmed) {
+      try { db.exec(trimmed); } catch { /* index/table already exists */ }
+    }
+  }
+}
+
+/** Seed chain_configs with public RPCs if empty. */
+function seedChainConfigs(db: InstanceType<typeof Database>): void {
+  const count = (db.prepare('SELECT COUNT(*) as c FROM chain_configs').get() as { c: number }).c;
+  if (count > 0) return;
+
+  const stmt = db.prepare('INSERT OR IGNORE INTO chain_configs (chain_id, name, rpc_url, explorer_url) VALUES (?, ?, ?, ?)');
+  for (const cfg of CHAIN_CONFIGS_SEED) {
+    stmt.run(cfg.chain_id, cfg.name, cfg.rpc_url, cfg.explorer_url);
+  }
 }
 
 // ─── Advertisers ─────────────────────────────────────────────────────────────
@@ -85,13 +125,16 @@ export function createCampaign(
     bid_amount: number;
     start_date?: string;
     end_date?: string;
+    verification_type?: Campaign['verification_type'];
+    contract_address?: string;
+    chain_ids?: number[];
   },
 ): Campaign {
   const id = crypto.randomUUID();
   const stmt = db.prepare(`
     INSERT INTO campaigns
-      (id, advertiser_id, name, objective, total_budget, daily_budget, pricing_model, bid_amount, start_date, end_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, advertiser_id, name, objective, total_budget, daily_budget, pricing_model, bid_amount, start_date, end_date, verification_type, contract_address, chain_ids)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   stmt.run(
     id,
@@ -104,24 +147,30 @@ export function createCampaign(
     data.bid_amount,
     data.start_date ?? null,
     data.end_date ?? null,
+    data.verification_type ?? 'trust',
+    data.contract_address ?? null,
+    JSON.stringify(data.chain_ids ?? []),
   );
-  return db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id) as Campaign;
+  const row = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id) as CampaignRow;
+  return parseCampaignRow(row);
 }
 
 export function getCampaignById(
   db: InstanceType<typeof Database>,
   id: string,
 ): Campaign | null {
-  return (db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id) as Campaign) ?? null;
+  const row = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id) as CampaignRow | undefined;
+  return row ? parseCampaignRow(row) : null;
 }
 
 export function getCampaignsByAdvertiser(
   db: InstanceType<typeof Database>,
   advertiser_id: string,
 ): Campaign[] {
-  return db
+  const rows = db
     .prepare('SELECT * FROM campaigns WHERE advertiser_id = ?')
-    .all(advertiser_id) as Campaign[];
+    .all(advertiser_id) as CampaignRow[];
+  return rows.map(parseCampaignRow);
 }
 
 export function updateCampaignSpent(
@@ -185,7 +234,8 @@ export function listCampaigns(
   }
 
   sql += ' ORDER BY created_at DESC';
-  return db.prepare(sql).all(...params) as Campaign[];
+  const rows = db.prepare(sql).all(...params) as CampaignRow[];
+  return rows.map(parseCampaignRow);
 }
 
 // ─── Ads ─────────────────────────────────────────────────────────────────────
@@ -299,13 +349,17 @@ export function insertEvent(
     platform_revenue: number;
     context_hash?: string;
     metadata?: Record<string, unknown>;
+    tx_hash?: string;
+    chain_id?: number;
+    verification_status?: VerificationStatus;
+    verification_details?: Record<string, unknown>;
   },
 ): Event {
   const id = crypto.randomUUID();
   const stmt = db.prepare(`
     INSERT INTO events
-      (id, ad_id, developer_id, event_type, amount_charged, developer_revenue, platform_revenue, context_hash, metadata)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, ad_id, developer_id, event_type, amount_charged, developer_revenue, platform_revenue, context_hash, metadata, tx_hash, chain_id, verification_status, verification_details)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   stmt.run(
     id,
@@ -317,6 +371,10 @@ export function insertEvent(
     data.platform_revenue,
     data.context_hash ?? null,
     JSON.stringify(data.metadata ?? {}),
+    data.tx_hash ?? null,
+    data.chain_id ?? null,
+    data.verification_status ?? 'none',
+    JSON.stringify(data.verification_details ?? {}),
   );
   const row = db.prepare('SELECT * FROM events WHERE id = ?').get(id) as EventRow;
   return parseEventRow(row);
@@ -368,4 +426,106 @@ export function findApiKey(
   return (
     (db.prepare('SELECT * FROM api_keys WHERE key_hash = ?').get(key_hash) as ApiKey) ?? null
   );
+}
+
+// ─── Developer Wallet Management ────────────────────────────────────────────
+
+export function updateDeveloperWallet(
+  db: InstanceType<typeof Database>,
+  developerId: string,
+  walletAddress: string,
+  referralCode: string,
+): Developer {
+  db.prepare('UPDATE developers SET wallet_address = ?, referral_code = ? WHERE id = ?')
+    .run(walletAddress, referralCode, developerId);
+  return db.prepare('SELECT * FROM developers WHERE id = ?').get(developerId) as Developer;
+}
+
+export function getDeveloperById(
+  db: InstanceType<typeof Database>,
+  id: string,
+): Developer | null {
+  return (db.prepare('SELECT * FROM developers WHERE id = ?').get(id) as Developer) ?? null;
+}
+
+export function findDeveloperByWallet(
+  db: InstanceType<typeof Database>,
+  walletAddress: string,
+): Developer | null {
+  return (db.prepare('SELECT * FROM developers WHERE wallet_address = ?').get(walletAddress) as Developer) ?? null;
+}
+
+export function findDeveloperByReferral(
+  db: InstanceType<typeof Database>,
+  referralCode: string,
+): Developer | null {
+  return (db.prepare('SELECT * FROM developers WHERE referral_code = ?').get(referralCode) as Developer) ?? null;
+}
+
+// ─── Chain Configs ──────────────────────────────────────────────────────────
+
+export function getChainConfig(
+  db: InstanceType<typeof Database>,
+  chainId: number,
+): ChainConfig | null {
+  return (db.prepare('SELECT * FROM chain_configs WHERE chain_id = ?').get(chainId) as ChainConfig) ?? null;
+}
+
+export function upsertChainConfig(
+  db: InstanceType<typeof Database>,
+  config: { chain_id: number; name: string; rpc_url: string; explorer_url?: string },
+): ChainConfig {
+  db.prepare(`
+    INSERT INTO chain_configs (chain_id, name, rpc_url, explorer_url)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(chain_id) DO UPDATE SET name = excluded.name, rpc_url = excluded.rpc_url, explorer_url = excluded.explorer_url
+  `).run(config.chain_id, config.name, config.rpc_url, config.explorer_url ?? null);
+  return db.prepare('SELECT * FROM chain_configs WHERE chain_id = ?').get(config.chain_id) as ChainConfig;
+}
+
+// ─── Event Verification ─────────────────────────────────────────────────────
+
+export function updateEventVerification(
+  db: InstanceType<typeof Database>,
+  eventId: string,
+  status: VerificationStatus,
+  details?: Record<string, unknown>,
+): Event {
+  db.prepare(`
+    UPDATE events SET verification_status = ?, verified_at = ?, verification_details = ?
+    WHERE id = ?
+  `).run(
+    status,
+    status === 'verified' || status === 'rejected' ? new Date().toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '') : null,
+    JSON.stringify(details ?? {}),
+    eventId,
+  );
+  const row = db.prepare('SELECT * FROM events WHERE id = ?').get(eventId) as EventRow;
+  return parseEventRow(row);
+}
+
+export function getPendingVerifications(
+  db: InstanceType<typeof Database>,
+  limit: number,
+): Event[] {
+  const rows = db.prepare(`
+    SELECT * FROM events WHERE verification_status = 'pending' ORDER BY created_at ASC LIMIT ?
+  `).all(limit) as EventRow[];
+  return rows.map(parseEventRow);
+}
+
+export function findEventByTxHash(
+  db: InstanceType<typeof Database>,
+  txHash: string,
+): Event | null {
+  const row = db.prepare('SELECT * FROM events WHERE tx_hash = ?').get(txHash) as EventRow | undefined;
+  return row ? parseEventRow(row) : null;
+}
+
+export function getEventById(
+  db: InstanceType<typeof Database>,
+  eventId: string,
+): Event | null {
+  const row = db.prepare('SELECT * FROM events WHERE id = ?').get(eventId) as EventRow | undefined;
+  return row ? parseEventRow(row) : null;
 }
