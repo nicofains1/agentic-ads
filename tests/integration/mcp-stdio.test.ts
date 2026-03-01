@@ -74,7 +74,7 @@ describe('MCP Integration: stdio transport', () => {
   // ─── Tool Listing ──────────────────────────────────────────────────────────
 
   describe('Tool listing', () => {
-    it('lists all 9 tools', async () => {
+    it('lists all tools', async () => {
       const client = await createMcpClient(dbPath, advKey);
       try {
         const tools = await client.listTools();
