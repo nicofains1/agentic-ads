@@ -23,7 +23,7 @@ export class RateLimitError extends Error {
   }
 }
 
-// Default limits per tool (requests per minute)
+// Default limits per tool (requests per minute, unless otherwise specified)
 const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
   search_ads:             { maxRequests: 60,  windowMs: 60_000 },
   report_event:           { maxRequests: 120, windowMs: 60_000 },
@@ -33,6 +33,8 @@ const DEFAULT_LIMITS: Record<string, RateLimitConfig> = {
   get_ad_guidelines:      { maxRequests: 60,  windowMs: 60_000 },
   update_campaign:        { maxRequests: 20,  windowMs: 60_000 },
   list_campaigns:         { maxRequests: 30,  windowMs: 60_000 },
+  // REST endpoint rate limits (keyed by IP, not API key)
+  __register:             { maxRequests: 5,   windowMs: 3_600_000 }, // 5 per hour per IP
 };
 
 export class RateLimiter {
