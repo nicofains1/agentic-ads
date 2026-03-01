@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import {
   SCHEMA_SQL,
   MIGRATION_V2_SQL,
+  WITHDRAWAL_SCHEMA_SQL,
   CHAIN_CONFIGS_SEED,
   type Ad,
   type AdRow,
@@ -19,6 +20,8 @@ import {
   type Event,
   type EventRow,
   type VerificationStatus,
+  type Withdrawal,
+  type WithdrawalStatus,
 } from './schema.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -55,6 +58,7 @@ export function initDatabase(dbPath?: string): InstanceType<typeof Database> {
   db.exec(SCHEMA_SQL);
   migrateToV2(db);
   seedChainConfigs(db);
+  db.exec(WITHDRAWAL_SCHEMA_SQL);
   return db;
 }
 
@@ -528,4 +532,84 @@ export function getEventById(
 ): Event | null {
   const row = db.prepare('SELECT * FROM events WHERE id = ?').get(eventId) as EventRow | undefined;
   return row ? parseEventRow(row) : null;
+}
+
+// ─── Withdrawals ─────────────────────────────────────────────────────────────
+
+export function createWithdrawal(
+  db: InstanceType<typeof Database>,
+  params: { developer_id: string; amount: number; wallet_address: string },
+): Withdrawal {
+  const id = crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO withdrawals (id, developer_id, amount, wallet_address, status)
+    VALUES (?, ?, ?, ?, 'pending')
+  `).run(id, params.developer_id, params.amount, params.wallet_address);
+  return db.prepare('SELECT * FROM withdrawals WHERE id = ?').get(id) as Withdrawal;
+}
+
+export function completeWithdrawal(
+  db: InstanceType<typeof Database>,
+  withdrawalId: string,
+  txHash: string,
+): Withdrawal {
+  db.prepare(`
+    UPDATE withdrawals SET status = 'completed', tx_hash = ?, completed_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(txHash, withdrawalId);
+  return db.prepare('SELECT * FROM withdrawals WHERE id = ?').get(withdrawalId) as Withdrawal;
+}
+
+export function failWithdrawal(
+  db: InstanceType<typeof Database>,
+  withdrawalId: string,
+  error: string,
+): Withdrawal {
+  db.prepare(`
+    UPDATE withdrawals SET status = 'failed', error = ?, completed_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(error, withdrawalId);
+  return db.prepare('SELECT * FROM withdrawals WHERE id = ?').get(withdrawalId) as Withdrawal;
+}
+
+export function getWithdrawalsByDeveloper(
+  db: InstanceType<typeof Database>,
+  developerId: string,
+): Withdrawal[] {
+  return db.prepare('SELECT * FROM withdrawals WHERE developer_id = ? ORDER BY created_at DESC').all(developerId) as Withdrawal[];
+}
+
+export function getTotalWithdrawn(
+  db: InstanceType<typeof Database>,
+  developerId: string,
+): number {
+  const row = db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total FROM withdrawals
+    WHERE developer_id = ? AND status = 'completed'
+  `).get(developerId) as { total: number };
+  return row.total;
+}
+
+export function getRecentWithdrawal(
+  db: InstanceType<typeof Database>,
+  developerId: string,
+  withinMinutes: number = 60,
+): Withdrawal | null {
+  const row = db.prepare(`
+    SELECT * FROM withdrawals
+    WHERE developer_id = ? AND created_at > datetime('now', '-' || ? || ' minutes')
+    ORDER BY created_at DESC LIMIT 1
+  `).get(developerId, withinMinutes) as Withdrawal | undefined;
+  return row ?? null;
+}
+
+export function getDeveloperEarningsTotal(
+  db: InstanceType<typeof Database>,
+  developerId: string,
+): number {
+  const row = db.prepare(`
+    SELECT COALESCE(SUM(developer_revenue), 0) as total FROM events
+    WHERE developer_id = ?
+  `).get(developerId) as { total: number };
+  return row.total;
 }

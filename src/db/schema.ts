@@ -305,3 +305,36 @@ export const CHAIN_CONFIGS_SEED = [
   { chain_id: 42161, name: 'Arbitrum', rpc_url: 'https://arb1.arbitrum.io/rpc', explorer_url: 'https://arbiscan.io' },
   { chain_id: 43114, name: 'Avalanche', rpc_url: 'https://api.avax.network/ext/bc/C/rpc', explorer_url: 'https://snowtrace.io' },
 ];
+
+// ─── Withdrawal types ────────────────────────────────────────────────────────
+
+export type WithdrawalStatus = 'pending' | 'completed' | 'failed';
+
+export interface Withdrawal {
+  id: string;
+  developer_id: string;
+  amount: number;
+  wallet_address: string;
+  tx_hash: string | null;
+  status: WithdrawalStatus;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export const WITHDRAWAL_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS withdrawals (
+  id              TEXT PRIMARY KEY,
+  developer_id    TEXT NOT NULL REFERENCES developers(id),
+  amount          REAL NOT NULL,
+  wallet_address  TEXT NOT NULL,
+  tx_hash         TEXT,
+  status          TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','completed','failed')),
+  error           TEXT,
+  created_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+  completed_at    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_withdrawals_developer ON withdrawals(developer_id);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_status    ON withdrawals(status);
+`;
