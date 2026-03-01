@@ -383,6 +383,23 @@ server.tool(
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'On-chain verification failed', reason: verification.reason }) }], isError: true };
       }
 
+      // Anti-fraud: dedup by swapper address per campaign (1 conversion per swapper per 24h)
+      const swapperAddress = verification.details?.swapper_address;
+      if (swapperAddress) {
+        const swapperDupe = db.prepare(`
+          SELECT e.id FROM events e
+          JOIN ads a ON e.ad_id = a.id
+          WHERE a.campaign_id = ?
+            AND e.verification_details LIKE ?
+            AND e.event_type = 'conversion'
+            AND e.created_at >= datetime('now', '-24 hours')
+          LIMIT 1
+        `).get(campaign.id, `%"swapper_address":"${swapperAddress}"%`) as { id: string } | undefined;
+        if (swapperDupe) {
+          return { content: [{ type: 'text', text: JSON.stringify({ error: 'Duplicate conversion: this wallet already converted for this campaign in the last 24 hours', existing_event_id: swapperDupe.id }) }], isError: true };
+        }
+      }
+
       // Verified or pending — proceed to insert event
       const cost = verification.status === 'verified' ? campaign.bid_amount : 0; // Pending = no payout yet
       const developerRevenue = cost * 0.7;
@@ -393,35 +410,45 @@ server.tool(
         return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign budget exhausted', campaign_paused: true }) }], isError: true };
       }
 
-      const processEvent = db.transaction(() => {
-        const event = insertEvent(db, {
-          ad_id: params.ad_id,
-          developer_id: auth.entity_id,
-          event_type: 'conversion',
-          amount_charged: cost,
-          developer_revenue: developerRevenue,
-          platform_revenue: platformRevenue,
-          context_hash: params.context_hash,
-          metadata: params.metadata,
-          tx_hash: params.tx_hash,
-          chain_id: params.chain_id,
-          verification_status: verification.status,
-          verification_details: verification.details,
+      // Insert event — catch UNIQUE constraint violation (TOCTOU race on tx_hash)
+      let event;
+      try {
+        const processEvent = db.transaction(() => {
+          const ev = insertEvent(db, {
+            ad_id: params.ad_id,
+            developer_id: auth.entity_id,
+            event_type: 'conversion',
+            amount_charged: cost,
+            developer_revenue: developerRevenue,
+            platform_revenue: platformRevenue,
+            context_hash: params.context_hash,
+            metadata: params.metadata,
+            tx_hash: params.tx_hash,
+            chain_id: params.chain_id,
+            verification_status: verification.status,
+            verification_details: verification.details,
+          });
+
+          updateAdStats(db, params.ad_id, 'conversion', cost);
+          if (cost > 0) {
+            updateCampaignSpent(db, campaign.id, cost);
+            const updated = getCampaignById(db, campaign.id);
+            if (updated && updated.spent >= updated.total_budget) {
+              updateCampaignStatus(db, campaign.id, 'paused');
+            }
+          }
+
+          return ev;
         });
 
-        updateAdStats(db, params.ad_id, 'conversion', cost);
-        if (cost > 0) {
-          updateCampaignSpent(db, campaign.id, cost);
-          const updated = getCampaignById(db, campaign.id);
-          if (updated && updated.spent >= updated.total_budget) {
-            updateCampaignStatus(db, campaign.id, 'paused');
-          }
+        event = processEvent();
+      } catch (err) {
+        // Handle concurrent tx_hash submission (TOCTOU race)
+        if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
+          return { content: [{ type: 'text', text: JSON.stringify({ error: 'Transaction already reported (concurrent submission)' }) }], isError: true };
         }
-
-        return event;
-      });
-
-      const event = processEvent();
+        throw err;
+      }
 
       return {
         content: [{
