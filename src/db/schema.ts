@@ -191,4 +191,5 @@ CREATE INDEX IF NOT EXISTS idx_events_ad_id          ON events(ad_id);
 CREATE INDEX IF NOT EXISTS idx_events_developer_id   ON events(developer_id);
 CREATE INDEX IF NOT EXISTS idx_events_created_at     ON events(created_at);
 CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash     ON api_keys(key_hash);
+CREATE INDEX IF NOT EXISTS idx_events_dedup          ON events(developer_id, ad_id, event_type, created_at);
 `;
