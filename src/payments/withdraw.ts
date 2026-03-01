@@ -3,12 +3,12 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { createPublicClient, createWalletClient, http, parseUnits, formatUnits } from 'viem';
-import { polygon } from 'viem/chains';
+import { base } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 
-// USDC.e on Polygon (bridged) — what we currently hold
-const USDC_E_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as const;
-// USDC.e has 6 decimals
+// Native USDC on Base (Circle official)
+const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const;
+// USDC has 6 decimals
 const USDC_DECIMALS = 6;
 
 const ERC20_ABI = [
@@ -29,8 +29,10 @@ export interface WithdrawalResult {
 
 // ─── Client setup (lazy init — only when WALLET_PRIVATE_KEY is set) ─────────
 
-let _publicClient: ReturnType<typeof createPublicClient> | null = null;
-let _walletClient: ReturnType<typeof createWalletClient> | null = null;
+/* eslint-disable @typescript-eslint/no-explicit-any */
+let _publicClient: any = null;
+let _walletClient: any = null;
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 function getClients() {
   if (_publicClient && _walletClient) return { publicClient: _publicClient, walletClient: _walletClient };
@@ -40,12 +42,12 @@ function getClients() {
     throw new Error('WALLET_PRIVATE_KEY env var not set — cannot process withdrawals');
   }
 
-  const rpcUrl = process.env.POLYGON_RPC_URL || 'https://polygon-bor-rpc.publicnode.com';
+  const rpcUrl = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
   const account = privateKeyToAccount(privateKey as `0x${string}`);
   const transport = http(rpcUrl);
 
-  _publicClient = createPublicClient({ chain: polygon, transport });
-  _walletClient = createWalletClient({ chain: polygon, transport, account });
+  _publicClient = createPublicClient({ chain: base, transport });
+  _walletClient = createWalletClient({ chain: base, transport, account });
 
   return { publicClient: _publicClient, walletClient: _walletClient };
 }
@@ -53,12 +55,12 @@ function getClients() {
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * Get the platform wallet's USDC.e balance on Polygon.
+ * Get the platform wallet's USDC balance on Base.
  */
 export async function getPlatformBalance(): Promise<string> {
   const { publicClient, walletClient } = getClients();
   const balance = await publicClient.readContract({
-    address: USDC_E_ADDRESS,
+    address: USDC_ADDRESS,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: [walletClient.account!.address],
@@ -67,7 +69,7 @@ export async function getPlatformBalance(): Promise<string> {
 }
 
 /**
- * Send USDC.e from platform wallet to a developer's wallet.
+ * Send USDC from platform wallet to a developer's wallet on Base.
  * Simulates first, then sends. Returns tx hash on success.
  */
 export async function sendUsdc(
@@ -90,19 +92,19 @@ export async function sendUsdc(
 
     // Check balance first
     const balance = await publicClient.readContract({
-      address: USDC_E_ADDRESS,
+      address: USDC_ADDRESS,
       abi: ERC20_ABI,
       functionName: 'balanceOf',
       args: [walletClient.account!.address],
     });
 
     if (balance < amount) {
-      return { success: false, error: 'Insufficient platform USDC.e balance' };
+      return { success: false, error: 'Insufficient platform USDC balance' };
     }
 
     // Simulate to catch errors before spending gas
     const { request } = await publicClient.simulateContract({
-      address: USDC_E_ADDRESS,
+      address: USDC_ADDRESS,
       abi: ERC20_ABI,
       functionName: 'transfer',
       args: [recipientAddress as `0x${string}`, amount],
