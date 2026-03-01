@@ -7,10 +7,13 @@ import { createServer } from 'node:http';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 
-import { initDatabase, createAdvertiser, createDeveloper, createCampaign, createAd } from './db/index.js';
+import { initDatabase, createAdvertiser, createDeveloper, createCampaign, createAd, updateDeveloperWallet, getDeveloperById, findDeveloperByWallet } from './db/index.js';
 import { getAdGuidelines } from './tools/consumer/get-guidelines.js';
 import { authenticate, extractKeyFromHeader, generateApiKey, type AuthContext, AuthError } from './auth/middleware.js';
 import { RateLimiter, RateLimitError } from './auth/rate-limiter.js';
+import { verifyConversion } from './verification/on-chain.js';
+import { generateReferralCode, buildReferralLink } from './verification/referral.js';
+import { verifyWalletSignature, buildRegisterMessage } from './verification/wallet.js';
 
 // ─── CLI Args ────────────────────────────────────────────────────────────────
 
@@ -59,18 +62,21 @@ function autoSeed() {
   const osCampaign = createCampaign(db, {
     advertiser_id: onlyswaps.id,
     name: 'OnlySwaps — Swap Smarter',
-    objective: 'traffic',
+    objective: 'conversions',
     total_budget: 500,
     daily_budget: 20,
-    pricing_model: 'cpc',
-    bid_amount: 0.25,
+    pricing_model: 'cpa',
+    bid_amount: 2.00,
     start_date: '2026-01-01',
     end_date: '2026-12-31',
+    verification_type: 'on_chain',
+    contract_address: '0x1234567890abcdef1234567890abcdef12345678', // FeeCollector placeholder
+    chain_ids: [137, 1, 42161, 8453, 10],
   });
   createAd(db, {
     campaign_id: osCampaign.id,
     creative_text: 'OnlySwaps — Swap tokens across DEXs at the best rates. Zero slippage, lightning fast, multichain. The smart way to trade crypto.',
-    link_url: 'https://github.com/0xKoaj/onlyswaps',
+    link_url: 'https://onlyswaps.fyi',
     keywords: ['crypto', 'swap', 'defi', 'web3', 'tokens', 'trading', 'dex', 'ethereum', 'blockchain'],
     categories: ['finance', 'crypto', 'web3'],
     geo: 'ALL',
@@ -79,7 +85,7 @@ function autoSeed() {
   createAd(db, {
     campaign_id: osCampaign.id,
     creative_text: 'Tired of bad swap rates? OnlySwaps aggregates DEXs to find the best price. Flashloan arbitrage included. Open source.',
-    link_url: 'https://github.com/0xKoaj/onlyswaps',
+    link_url: 'https://onlyswaps.fyi',
     keywords: ['arbitrage', 'flashloan', 'uniswap', 'sushiswap', 'token swap', 'crypto trading'],
     categories: ['finance', 'crypto', 'defi'],
     geo: 'ALL',
@@ -123,14 +129,18 @@ function autoSeed() {
     language: 'en',
   });
 
-  // Demo developer for consumers to test
+  // Demo developer for consumers to test (with wallet for on-chain verification)
   const demo = createDeveloper(db, { name: 'DemoBot', email: 'demo@agentic-ads.com' });
   const devKey = generateApiKey(db, 'developer', demo.id);
+  const demoWallet = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'; // Hardhat #0
+  const demoReferral = generateReferralCode(demoWallet);
+  updateDeveloperWallet(db, demo.id, demoWallet, demoReferral);
 
   console.error('[agentic-ads] Auto-seed complete:');
   console.error(`  OnlySwaps advertiser key: ${osKey}`);
   console.error(`  Agentic Ads advertiser key: ${agKey}`);
   console.error(`  DemoBot developer key: ${devKey}`);
+  console.error(`  DemoBot wallet: ${demoWallet} (referral: ${demoReferral})`);
 }
 
 autoSeed();
@@ -275,11 +285,36 @@ server.tool(
 
     const ranked = rankAds(matches, params.max_results);
 
+    // Enrich on-chain campaign ads with referral links when developer has a wallet
+    const auth = getAuth(extra);
+    let developer: { wallet_address: string | null; referral_code: string | null } | null = null;
+    if (auth?.entity_type === 'developer') {
+      developer = getDeveloperById(db, auth.entity_id);
+    }
+
+    const { getAdById: lookupAd, getCampaignById: lookupCampaign } = await import('./db/index.js');
+
+    const enrichedAds = ranked.map((ad) => {
+      const adRecord = lookupAd(db, ad.ad_id);
+      if (!adRecord) return ad;
+      const camp = lookupCampaign(db, adRecord.campaign_id);
+      if (camp?.verification_type === 'on_chain' && developer?.wallet_address && developer?.referral_code) {
+        return {
+          ...ad,
+          verification_type: 'on_chain' as const,
+          referral_link: buildReferralLink(ad.link_url, developer.referral_code, developer.wallet_address),
+          referral_code: developer.referral_code,
+          conversion_instructions: 'User must transact via referral link. Report conversion with tx_hash and chain_id.',
+        };
+      }
+      return ad;
+    });
+
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ ads: ranked }, null, 2),
+          text: JSON.stringify({ ads: enrichedAds }, null, 2),
         },
       ],
     };
@@ -288,18 +323,20 @@ server.tool(
 
 server.tool(
   'report_event',
-  'Report an ad event (impression, click, or conversion). Call this after showing a sponsored ad to the user.',
+  'Report an ad event (impression, click, or conversion). For on-chain verified campaigns, conversions require tx_hash and chain_id.',
   {
     ad_id: z.string().describe('The ad_id from search_ads results'),
     event_type: z.enum(['impression', 'click', 'conversion']).describe('Type of event'),
     context_hash: z.string().optional().describe('Hash of the message containing the ad (for verification)'),
     metadata: z.record(z.unknown()).optional().describe('Additional event metadata'),
+    tx_hash: z.string().optional().describe('Transaction hash for on-chain verified conversions'),
+    chain_id: z.number().optional().describe('Chain ID for on-chain verified conversions (e.g. 137 for Polygon)'),
   },
   async (params, extra) => {
     logToolCall('report_event', extra.sessionId);
     const auth = requireAuth(extra, 'developer');
     checkRateLimit(extra, 'report_event');
-    const { getAdById, insertEvent, updateAdStats, updateCampaignSpent, updateCampaignStatus, getCampaignById } = await import('./db/index.js');
+    const { getAdById, insertEvent, updateAdStats, updateCampaignSpent, updateCampaignStatus, getCampaignById, findEventByTxHash, updateEventVerification } = await import('./db/index.js');
 
     const ad = getAdById(db, params.ad_id);
     if (!ad) {
@@ -311,8 +348,101 @@ server.tool(
       return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign not active' }) }], isError: true };
     }
 
+    // ─── On-chain verification for conversions ─────────────────────────────
+    const isOnChainConversion = campaign.verification_type === 'on_chain' && params.event_type === 'conversion';
+
+    if (isOnChainConversion) {
+      // Require tx_hash and chain_id for on-chain conversions
+      if (!params.tx_hash || !params.chain_id) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'On-chain verified conversions require tx_hash and chain_id' }) }], isError: true };
+      }
+
+      // Check tx_hash uniqueness (prevent double-reporting)
+      const existingEvent = findEventByTxHash(db, params.tx_hash);
+      if (existingEvent) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'Transaction already reported', existing_event_id: existingEvent.id, verification_status: existingEvent.verification_status }) }], isError: true };
+      }
+
+      // Require developer to have a registered wallet
+      const developer = getDeveloperById(db, auth.entity_id);
+      if (!developer?.wallet_address) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'Wallet not registered. Use register_wallet tool first.' }) }], isError: true };
+      }
+
+      // Verify on-chain (5s timeout)
+      const verification = await verifyConversion(
+        params.tx_hash,
+        params.chain_id,
+        developer.wallet_address,
+        campaign.contract_address ?? undefined,
+        db,
+        5000,
+      );
+
+      if (verification.status === 'rejected') {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'On-chain verification failed', reason: verification.reason }) }], isError: true };
+      }
+
+      // Verified or pending — proceed to insert event
+      const cost = verification.status === 'verified' ? campaign.bid_amount : 0; // Pending = no payout yet
+      const developerRevenue = cost * 0.7;
+      const platformRevenue = cost * 0.3;
+
+      if (cost > 0 && campaign.spent + cost > campaign.total_budget) {
+        updateCampaignStatus(db, campaign.id, 'paused');
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'Campaign budget exhausted', campaign_paused: true }) }], isError: true };
+      }
+
+      const processEvent = db.transaction(() => {
+        const event = insertEvent(db, {
+          ad_id: params.ad_id,
+          developer_id: auth.entity_id,
+          event_type: 'conversion',
+          amount_charged: cost,
+          developer_revenue: developerRevenue,
+          platform_revenue: platformRevenue,
+          context_hash: params.context_hash,
+          metadata: params.metadata,
+          tx_hash: params.tx_hash,
+          chain_id: params.chain_id,
+          verification_status: verification.status,
+          verification_details: verification.details,
+        });
+
+        updateAdStats(db, params.ad_id, 'conversion', cost);
+        if (cost > 0) {
+          updateCampaignSpent(db, campaign.id, cost);
+          const updated = getCampaignById(db, campaign.id);
+          if (updated && updated.spent >= updated.total_budget) {
+            updateCampaignStatus(db, campaign.id, 'paused');
+          }
+        }
+
+        return event;
+      });
+
+      const event = processEvent();
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            event_id: event.id,
+            event_type: 'conversion',
+            verification_status: verification.status,
+            amount_charged: cost,
+            developer_revenue: developerRevenue,
+            remaining_budget: campaign.total_budget - campaign.spent - cost,
+            ...(verification.status === 'pending' ? { message: 'Transaction pending verification. Check status with get_verification_status.' } : {}),
+            ...(verification.details ? { verification_details: verification.details } : {}),
+          }),
+        }],
+      };
+    }
+
+    // ─── Standard (trust-based) event flow ─────────────────────────────────
+
     // Event deduplication: reject duplicate (developer_id, ad_id, event_type) within window
-    // Impressions: 60s, clicks: 5min, conversions: 1h
     const dedupWindows: Record<string, number> = { impression: 60, click: 300, conversion: 3600 };
     const dedupSeconds = dedupWindows[params.event_type] ?? 60;
     const recentDupe = db.prepare(`
@@ -334,7 +464,6 @@ server.tool(
     } else if (campaign.pricing_model === 'cpa' && params.event_type === 'conversion') {
       cost = campaign.bid_amount;
     }
-    // For non-billable events under this pricing model, cost stays 0
 
     // Check budget
     if (campaign.spent + cost > campaign.total_budget) {
@@ -346,7 +475,6 @@ server.tool(
     const developerRevenue = cost * 0.7;
     const platformRevenue = cost * 0.3;
 
-    // Use transaction for atomicity
     const processEvent = db.transaction(() => {
       const event = insertEvent(db, {
         ad_id: params.ad_id,
@@ -360,12 +488,9 @@ server.tool(
       });
 
       updateAdStats(db, params.ad_id, params.event_type, cost);
-
       if (cost > 0) {
         updateCampaignSpent(db, campaign.id, cost);
       }
-
-      // Auto-pause if budget exhausted after this event
       const updated = getCampaignById(db, campaign.id);
       if (updated && updated.spent >= updated.total_budget) {
         updateCampaignStatus(db, campaign.id, 'paused');
@@ -377,18 +502,16 @@ server.tool(
     const event = processEvent();
 
     return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            event_id: event.id,
-            event_type: params.event_type,
-            amount_charged: cost,
-            developer_revenue: developerRevenue,
-            remaining_budget: campaign.total_budget - campaign.spent - cost,
-          }),
-        },
-      ],
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          event_id: event.id,
+          event_type: params.event_type,
+          amount_charged: cost,
+          developer_revenue: developerRevenue,
+          remaining_budget: campaign.total_budget - campaign.spent - cost,
+        }),
+      }],
     };
   },
 );
@@ -774,6 +897,94 @@ server.tool(
   },
 );
 
+// ─── Wallet & Verification Tools ─────────────────────────────────────────────
+
+server.tool(
+  'register_wallet',
+  'Register a wallet address for receiving on-chain conversion payouts. Optionally provide a signature to prove ownership (EIP-191).',
+  {
+    wallet_address: z.string().regex(/^0x[0-9a-fA-F]{40}$/).describe('Ethereum wallet address (0x...)'),
+    signature: z.string().optional().describe('Optional EIP-191 signature of challenge message to prove wallet ownership'),
+    timestamp: z.string().optional().describe('Timestamp used in challenge message (required if signature provided)'),
+  },
+  async (params, extra) => {
+    logToolCall('register_wallet', extra.sessionId);
+    const auth = requireAuth(extra, 'developer');
+    checkRateLimit(extra, 'register_wallet');
+
+    // Optional signature verification (for developers who want extra security)
+    if (params.signature) {
+      if (!params.timestamp) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'timestamp is required when providing a signature' }) }], isError: true };
+      }
+      const message = buildRegisterMessage(auth.entity_id, params.timestamp);
+      const valid = verifyWalletSignature(params.wallet_address, message, params.signature);
+      if (!valid) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: 'Signature verification failed. Message must be: ' + message }) }], isError: true };
+      }
+    }
+
+    // Check wallet not already claimed by another developer
+    const existing = findDeveloperByWallet(db, params.wallet_address);
+    if (existing && existing.id !== auth.entity_id) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Wallet already registered by another developer' }) }], isError: true };
+    }
+
+    const referralCode = generateReferralCode(params.wallet_address);
+    const developer = updateDeveloperWallet(db, auth.entity_id, params.wallet_address, referralCode);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          wallet_address: developer.wallet_address,
+          referral_code: developer.referral_code,
+          message: 'Wallet registered. On-chain campaign ads will now include your referral link.',
+        }),
+      }],
+    };
+  },
+);
+
+server.tool(
+  'get_verification_status',
+  'Check the verification status of a conversion event (verified, pending, or rejected).',
+  {
+    event_id: z.string().describe('The event_id returned by report_event'),
+  },
+  async (params, extra) => {
+    logToolCall('get_verification_status', extra.sessionId);
+    const auth = requireAuth(extra, 'developer');
+    checkRateLimit(extra, 'get_verification_status');
+    const { getEventById } = await import('./db/index.js');
+
+    const event = getEventById(db, params.event_id);
+    if (!event) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Event not found' }) }], isError: true };
+    }
+    if (event.developer_id !== auth.entity_id) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Not authorized to view this event' }) }], isError: true };
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          event_id: event.id,
+          event_type: event.event_type,
+          verification_status: event.verification_status,
+          verified_at: event.verified_at,
+          tx_hash: event.tx_hash,
+          chain_id: event.chain_id,
+          amount_charged: event.amount_charged,
+          developer_revenue: event.developer_revenue,
+          verification_details: event.verification_details,
+        }),
+      }],
+    };
+  },
+);
+
 } // end registerTools
 
 // ─── Transport & Startup ─────────────────────────────────────────────────────
@@ -1001,6 +1212,82 @@ async function startHttp() {
   });
 }
 
+// ─── Background Verification Worker ─────────────────────────────────────────
+// Processes pending on-chain verifications every 30 seconds.
+// Only runs in HTTP mode (long-lived server process).
+
+async function processVerificationQueue() {
+  const { getPendingVerifications, updateEventVerification, getAdById, getCampaignById, updateAdStats, updateCampaignSpent, updateCampaignStatus } = await import('./db/index.js');
+
+  const pending = getPendingVerifications(db, 10);
+  if (pending.length === 0) return;
+
+  console.error(`[agentic-ads] Processing ${pending.length} pending verifications...`);
+
+  for (const event of pending) {
+    if (!event.tx_hash || !event.chain_id) continue;
+
+    const developer = getDeveloperById(db, event.developer_id);
+    if (!developer?.wallet_address) continue;
+
+    const ad = getAdById(db, event.ad_id);
+    if (!ad) continue;
+
+    const campaign = getCampaignById(db, ad.campaign_id);
+    if (!campaign) continue;
+
+    try {
+      const result = await verifyConversion(
+        event.tx_hash,
+        event.chain_id,
+        developer.wallet_address,
+        campaign.contract_address ?? undefined,
+        db,
+        5000,
+      );
+
+      if (result.status === 'verified') {
+        const cost = campaign.bid_amount;
+        const developerRevenue = cost * 0.7;
+        const platformRevenue = cost * 0.3;
+
+        db.transaction(() => {
+          updateEventVerification(db, event.id, 'verified', { ...result.details, amount_charged: cost, developer_revenue: developerRevenue, platform_revenue: platformRevenue });
+          // Update the event's financial fields
+          db.prepare('UPDATE events SET amount_charged = ?, developer_revenue = ?, platform_revenue = ? WHERE id = ?')
+            .run(cost, developerRevenue, platformRevenue, event.id);
+          updateAdStats(db, event.ad_id, 'conversion', cost);
+          updateCampaignSpent(db, campaign.id, cost);
+          const updated = getCampaignById(db, campaign.id);
+          if (updated && updated.spent >= updated.total_budget) {
+            updateCampaignStatus(db, campaign.id, 'paused');
+          }
+        })();
+
+        console.error(`[agentic-ads] Verified: event=${event.id} tx=${event.tx_hash}`);
+      } else if (result.status === 'rejected') {
+        updateEventVerification(db, event.id, 'rejected', { reason: result.reason });
+        console.error(`[agentic-ads] Rejected: event=${event.id} reason=${result.reason}`);
+      }
+      // If still pending, skip — will retry next cycle
+    } catch (err) {
+      console.error(`[agentic-ads] Verification error for event=${event.id}:`, err);
+    }
+  }
+}
+
+function startVerificationWorker() {
+  // Run every 30 seconds
+  const interval = setInterval(() => {
+    processVerificationQueue().catch(err => {
+      console.error('[agentic-ads] Verification worker error:', err);
+    });
+  }, 30_000);
+  // Don't block process exit
+  interval.unref();
+  console.error('[agentic-ads] Background verification worker started (30s interval)');
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 if (mode === 'stdio') {
@@ -1013,4 +1300,5 @@ if (mode === 'stdio') {
     console.error('[agentic-ads] Fatal error:', err);
     process.exit(1);
   });
+  startVerificationWorker();
 }

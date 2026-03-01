@@ -20,7 +20,12 @@
     "lint": "eslint src/ tests/",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["mcp", "advertising", "ai-agents", "openclaw"],
+  "keywords": [
+    "mcp",
+    "advertising",
+    "ai-agents",
+    "openclaw"
+  ],
   "author": "",
   "license": "MIT",
   "repository": {
@@ -35,17 +40,20 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "@noble/secp256k1": "^3.0.0",
     "better-sqlite3": "^11.8.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.19.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.12.0",
     "eslint": "^9.19.0",
-    "@eslint/js": "^9.19.0",
-    "typescript-eslint": "^8.23.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.23.0",
     "vitest": "^3.0.0"
   }
 }
