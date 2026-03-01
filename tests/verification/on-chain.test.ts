@@ -156,19 +156,53 @@ describe('On-Chain Verification', () => {
     expect(result.reason).toContain('timed out');
   });
 
-  it('verifies when referrer is tx sender (no logs match needed)', async () => {
-    const receiptFromReferrer = mockReceipt({
+  it('rejects self-swap (tx sender === referrer)', async () => {
+    const receiptSelfSwap = mockReceipt({
       from: REFERRER.toLowerCase(),
-      logs: [], // no events at all
+      logs: [{
+        address: CONTRACT.toLowerCase(),
+        topics: [FEE_COLLECTED_TOPIC, REFERRER_PADDED, REFERRER_PADDED],
+        data: '0x' + '00'.repeat(31) + '0a',
+      }],
     });
 
     global.fetch = createFetchMock([
-      { result: receiptFromReferrer },
+      { result: receiptSelfSwap },
       { result: '0x110' },
     ]) as unknown as typeof fetch;
 
-    const result = await verifyConversion('0xfromreferrer', 137, REFERRER, undefined);
+    const result = await verifyConversion('0xselfswap', 137, REFERRER, CONTRACT);
+    expect(result.verified).toBe(false);
+    expect(result.status).toBe('rejected');
+    expect(result.reason).toContain('Self-swap');
+  });
+
+  it('returns pending when block number RPC fails', async () => {
+    let callIndex = 0;
+    global.fetch = vi.fn(async () => {
+      callIndex++;
+      if (callIndex === 1) {
+        // eth_getTransactionReceipt succeeds
+        return { ok: true, json: async () => ({ result: mockReceipt() }) };
+      }
+      // eth_blockNumber fails
+      throw new Error('RPC down');
+    }) as unknown as typeof fetch;
+
+    const result = await verifyConversion('0xblockfail', 137, REFERRER, CONTRACT);
+    expect(result.verified).toBe(false);
+    expect(result.status).toBe('pending');
+    expect(result.reason).toContain('block recency');
+  });
+
+  it('includes swapper_address in verification details', async () => {
+    global.fetch = createFetchMock([
+      { result: mockReceipt() },
+      { result: '0x110' },
+    ]) as unknown as typeof fetch;
+
+    const result = await verifyConversion('0xswapperaddr', 137, REFERRER, CONTRACT);
     expect(result.verified).toBe(true);
-    expect(result.status).toBe('verified');
+    expect(result.details?.swapper_address).toBe('0xuser000000000000000000000000000000000001');
   });
 });
