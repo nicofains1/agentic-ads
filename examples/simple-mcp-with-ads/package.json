@@ -19,8 +19,7 @@
   "author": "Agentic Ads",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
-    "agentic-ads": "^0.1.1"
+    "@modelcontextprotocol/sdk": "^1.12.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
