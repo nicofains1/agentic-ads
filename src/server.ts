@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 
-import { initDatabase, createAdvertiser, createDeveloper, createCampaign, createAd, updateDeveloperWallet, getDeveloperById, findDeveloperByWallet } from './db/index.js';
+import { initDatabase, createAdvertiser, createDeveloper, createCampaign, createAd, updateDeveloperWallet, getDeveloperById, findDeveloperByWallet, createWithdrawal, completeWithdrawal, failWithdrawal, getTotalWithdrawn, getRecentWithdrawal, getDeveloperEarningsTotal } from './db/index.js';
 import { getAdGuidelines } from './tools/consumer/get-guidelines.js';
 import { authenticate, extractKeyFromHeader, generateApiKey, type AuthContext, AuthError } from './auth/middleware.js';
 import { RateLimiter, RateLimitError } from './auth/rate-limiter.js';
@@ -15,6 +15,7 @@ import { verifyConversion } from './verification/on-chain.js';
 import { generateReferralCode, buildReferralLink } from './verification/referral.js';
 import { verifyWalletSignature, buildRegisterMessage } from './verification/wallet.js';
 import { validateCreativeText } from './security/creative-sanitization.js';
+import { sendUsdc, isPaymentEnabled, getPlatformBalance } from './payments/withdraw.js';
 
 // ─── CLI Args ────────────────────────────────────────────────────────────────
 
@@ -1023,6 +1024,88 @@ server.tool(
         }),
       }],
     };
+  },
+);
+
+
+// ─── Withdrawal Tool ──────────────────────────────────────────────────────────
+
+server.tool(
+  'request_withdrawal',
+  'Request a withdrawal of earned USDC.e to your registered Polygon wallet. Minimum $1.00, maximum $50.00 per request. Rate limited to 1 per hour.',
+  {
+    amount: z.number().min(1).max(50).optional().describe('Amount in USD to withdraw. If omitted, withdraws full available balance (up to $50).'),
+  },
+  async (params, extra) => {
+    logToolCall('request_withdrawal', extra.sessionId);
+    const auth = requireAuth(extra, 'developer');
+    checkRateLimit(extra, 'request_withdrawal');
+
+    // Check if payments are enabled
+    if (!isPaymentEnabled()) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Withdrawals are not enabled on this server (WALLET_PRIVATE_KEY not configured)' }) }], isError: true };
+    }
+
+    // Get developer info
+    const developer = getDeveloperById(db, auth.entity_id);
+    if (!developer) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Developer not found' }) }], isError: true };
+    }
+    if (!developer.wallet_address) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'No wallet registered. Call register_wallet first.' }) }], isError: true };
+    }
+
+    // Check rate limit (1 per hour)
+    const recent = getRecentWithdrawal(db, auth.entity_id, 60);
+    if (recent) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Rate limited: 1 withdrawal per hour. Last withdrawal: ' + recent.created_at }) }], isError: true };
+    }
+
+    // Calculate available balance
+    const totalEarned = getDeveloperEarningsTotal(db, auth.entity_id);
+    const totalWithdrawn = getTotalWithdrawn(db, auth.entity_id);
+    const available = Math.round((totalEarned - totalWithdrawn) * 100) / 100;
+
+    if (available < 1) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Minimum withdrawal is $1.00. Available: $' + available.toFixed(2) }) }], isError: true };
+    }
+
+    const amount = Math.min(params.amount ?? available, available, 50);
+    if (amount < 1) {
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Withdrawal amount must be at least $1.00' }) }], isError: true };
+    }
+
+    // Create withdrawal record
+    const withdrawal = createWithdrawal(db, {
+      developer_id: auth.entity_id,
+      amount,
+      wallet_address: developer.wallet_address,
+    });
+
+    // Execute USDC transfer
+    const result = await sendUsdc(developer.wallet_address, amount);
+
+    if (result.success) {
+      const completed = completeWithdrawal(db, withdrawal.id, result.tx_hash!);
+      console.error(`[agentic-ads] Withdrawal completed: $${amount} USDC.e to ${developer.wallet_address} (tx: ${result.tx_hash})`);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            withdrawal_id: completed.id,
+            amount: completed.amount,
+            wallet_address: completed.wallet_address,
+            tx_hash: completed.tx_hash,
+            status: 'completed',
+            explorer_url: `https://polygonscan.com/tx/${completed.tx_hash}`,
+            remaining_balance: Math.round((available - amount) * 100) / 100,
+          }),
+        }],
+      };
+    } else {
+      failWithdrawal(db, withdrawal.id, result.error ?? 'Unknown error');
+      return { content: [{ type: 'text', text: JSON.stringify({ error: 'Withdrawal failed: ' + result.error, withdrawal_id: withdrawal.id }) }], isError: true };
+    }
   },
 );
 
