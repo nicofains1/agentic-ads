@@ -334,7 +334,7 @@ server.tool(
     context_hash: z.string().optional().describe('Hash of the message containing the ad (for verification)'),
     metadata: z.record(z.unknown()).optional().describe('Additional event metadata'),
     tx_hash: z.string().optional().describe('Transaction hash for on-chain verified conversions'),
-    chain_id: z.number().optional().describe('Chain ID for on-chain verified conversions (e.g. 137 for Polygon)'),
+    chain_id: z.number().optional().describe('Chain ID for on-chain verified conversions (e.g. 8453 for Base)'),
   },
   async (params, extra) => {
     logToolCall('report_event', extra.sessionId);
@@ -1097,7 +1097,7 @@ server.tool(
             wallet_address: completed.wallet_address,
             tx_hash: completed.tx_hash,
             status: 'completed',
-            explorer_url: `https://polygonscan.com/tx/${completed.tx_hash}`,
+            explorer_url: `https://basescan.org/tx/${completed.tx_hash}`,
             remaining_balance: Math.round((available - amount) * 100) / 100,
           }),
         }],

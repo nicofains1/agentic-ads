@@ -89,6 +89,7 @@ describe('MCP Integration: stdio transport', () => {
           'list_campaigns',
           'register_wallet',
           'report_event',
+          'request_withdrawal',
           'search_ads',
           'update_campaign',
         ]);
