@@ -14,6 +14,7 @@ import { RateLimiter, RateLimitError } from './auth/rate-limiter.js';
 import { verifyConversion } from './verification/on-chain.js';
 import { generateReferralCode, buildReferralLink } from './verification/referral.js';
 import { verifyWalletSignature, buildRegisterMessage } from './verification/wallet.js';
+import { validateCreativeText } from './security/creative-sanitization.js';
 
 // ─── CLI Args ────────────────────────────────────────────────────────────────
 
@@ -595,6 +596,8 @@ server.tool(
   },
 );
 
+// ─── create_ad ──────────────────────────────────────────────────────────────
+
 server.tool(
   'create_ad',
   'Create an ad unit within an existing campaign with creative text, link, and targeting',
@@ -611,6 +614,15 @@ server.tool(
     logToolCall('create_ad', extra.sessionId);
     const auth = requireAuth(extra, 'advertiser');
     checkRateLimit(extra, 'create_ad');
+
+    // Validate creative_text for prompt injection patterns
+    if (params.creative_text.length > 0) {
+      const validation = validateCreativeText(params.creative_text);
+      if (!validation.valid) {
+        return { content: [{ type: 'text', text: JSON.stringify({ error: `Creative text rejected: ${validation.reason}` }) }], isError: true };
+      }
+    }
+
     const { createAd, getCampaignById } = await import('./db/index.js');
 
     const campaign = getCampaignById(db, params.campaign_id);
