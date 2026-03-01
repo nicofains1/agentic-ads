@@ -15,5 +15,5 @@ fi
 
 echo "[startup] Starting agentic-ads with DATABASE_PATH=$DB_PATH"
 
-# Use PORT from env (Railway/Fly.io set this) or default to 3000
-exec node dist/server.js --http --port "${PORT:-3000}"
+# Server reads PORT env var directly (Railway/Render set this), defaults to 3000
+exec node dist/server.js --http
