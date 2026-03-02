@@ -191,7 +191,7 @@ function checkRateLimit(extra: { sessionId?: string }, toolName: string): void {
 function createMcpServer(): McpServer {
   const server = new McpServer({
     name: 'agentic-ads',
-    version: '0.1.0',
+    version: '0.2.0',
   });
 
   registerTools(server);
@@ -1032,7 +1032,7 @@ server.tool(
 
 server.tool(
   'request_withdrawal',
-  'Request a withdrawal of earned USDC.e to your registered Polygon wallet. Minimum $1.00, maximum $50.00 per request. Rate limited to 1 per hour.',
+  'Request a withdrawal of earned USDC.e to your registered Base wallet. Minimum $1.00, maximum $50.00 per request. Rate limited to 1 per hour.',
   {
     amount: z.number().min(1).max(50).optional().describe('Amount in USD to withdraw. If omitted, withdraws full available balance (up to $50).'),
   },
@@ -1157,7 +1157,7 @@ async function startHttp() {
       res.end(JSON.stringify({
         name: 'agentic-ads',
         description: 'Ad network for AI agents — monetize MCP servers with contextual ads. 70% revenue share for developers.',
-        version: '0.1.0',
+        version: '0.2.0',
         url: `${publicBase}/mcp`,
         transport: { type: 'streamable-http', url: '/mcp' },
         tools: [
@@ -1178,7 +1178,7 @@ async function startHttp() {
     // Health check
     if (url.pathname === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', server: 'agentic-ads', version: '0.1.0' }));
+      res.end(JSON.stringify({ status: 'ok', server: 'agentic-ads', version: '0.2.0' }));
       return;
     }
 
