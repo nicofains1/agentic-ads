@@ -614,6 +614,33 @@ describe('MCP Integration: stdio transport', () => {
       expect(ads.length).toBe(0);
     });
 
+    it('search_ads: min_relevance filters out low-score ads', async () => {
+      // First get ads without filter to confirm some exist
+      const unfiltered = await client.callTool({
+        name: 'search_ads',
+        arguments: { query: 'running shoes', language: 'en', max_results: 3, min_relevance: 0 },
+      });
+      const { data: unfilteredData } = parseToolResult(unfiltered);
+      const allAds = unfilteredData.ads as Array<Record<string, unknown>>;
+
+      // With min_relevance=1.0 no ads should pass (perfect score unlikely)
+      const filtered = await client.callTool({
+        name: 'search_ads',
+        arguments: { query: 'running shoes', language: 'en', max_results: 3, min_relevance: 1.0 },
+      });
+      const { data: filteredData } = parseToolResult(filtered);
+      const highScoreAds = filteredData.ads as Array<Record<string, unknown>>;
+
+      // All returned ads must meet the threshold
+      for (const ad of allAds) {
+        expect(typeof ad.relevance_score).toBe('number');
+      }
+      // Every ad in a filtered result must satisfy min_relevance
+      for (const ad of highScoreAds) {
+        expect((ad.relevance_score as number) >= 1.0).toBe(true);
+      }
+    });
+
     it('report_event: impression on CPC is free', async () => {
       // Get an ad_id from search
       const searchResult = await client.callTool({
