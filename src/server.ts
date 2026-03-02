@@ -241,6 +241,7 @@ server.tool(
     geo: z.string().optional().describe('Country code (e.g. "US")'),
     language: z.string().default('en').describe('Language code'),
     max_results: z.number().min(1).max(10).default(3).describe('Max ads to return'),
+    min_relevance: z.number().min(0).max(1).default(0).describe('Minimum relevance score (0-1). Ads below this threshold are excluded. Default 0 (return all).'),
   },
   async (params, extra) => {
     logToolCall('search_ads', extra.sessionId);
@@ -287,7 +288,9 @@ server.tool(
       candidates,
     );
 
-    const ranked = rankAds(matches, params.max_results);
+    const ranked = rankAds(matches, params.max_results).filter(
+      (ad) => ad.relevance_score >= params.min_relevance,
+    );
 
     // Enrich on-chain campaign ads with referral links when developer has a wallet
     const auth = getAuth(extra);
