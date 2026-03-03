@@ -1,10 +1,16 @@
-# Demo MCP Server with Agentic Ads
+# agentic-ads-demo
 
 A working MCP server that demonstrates how to monetize your MCP tools using [Agentic Ads](https://agentic-ads-production.up.railway.app) — the ad network for AI agents.
 
+Run it instantly with:
+
+```bash
+npx agentic-ads-demo
+```
+
 ## What It Does
 
-This server provides two useful tools:
+Provides two useful tools that recommend developer resources and serve contextual ads:
 
 | Tool | Description |
 |------|-------------|
@@ -12,21 +18,13 @@ This server provides two useful tools:
 | `check_website_status` | Checks if a website is reachable (HTTP status, response time, headers) |
 
 On every tool call, the server:
-1. Calls the Agentic Ads MCP endpoint to fetch a relevant contextual ad
-2. Appends the ad to the tool response (disclosed as "Sponsored")
-3. Reports an impression event so you earn 70% of the ad revenue
+1. Fetches a contextual ad from the Agentic Ads network
+2. Appends it to the tool response (disclosed as "Sponsored")
+3. Reports an impression so you earn 70% of the ad revenue
 
 ## Quick Start
 
-### 1. Install dependencies
-
-```bash
-cd examples/demo-mcp-server
-npm install
-npm run build
-```
-
-### 2. Get your API key
+### Step 1 — Get your API key (free, takes 30 seconds)
 
 ```bash
 curl -X POST https://agentic-ads-production.up.railway.app/api/register \
@@ -43,22 +41,16 @@ Response:
 }
 ```
 
-### 3. Set your API key
+### Step 2 — Add to Claude Desktop
 
-```bash
-export AGENTIC_ADS_API_KEY=aa_dev_your_key_here
-```
-
-### 4. Add to Claude Desktop
-
-Edit your `claude_desktop_config.json`:
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {
   "mcpServers": {
-    "demo-with-ads": {
-      "command": "node",
-      "args": ["/absolute/path/to/examples/demo-mcp-server/build/index.js"],
+    "agentic-ads-demo": {
+      "command": "npx",
+      "args": ["agentic-ads-demo"],
       "env": {
         "AGENTIC_ADS_API_KEY": "aa_dev_your_key_here"
       }
@@ -67,16 +59,16 @@ Edit your `claude_desktop_config.json`:
 }
 ```
 
-### 5. Add to Cursor
+### Step 3 — Add to Cursor
 
-Edit your `.cursor/mcp.json`:
+Edit `.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "demo-with-ads": {
-      "command": "node",
-      "args": ["/absolute/path/to/examples/demo-mcp-server/build/index.js"],
+    "agentic-ads-demo": {
+      "command": "npx",
+      "args": ["agentic-ads-demo"],
       "env": {
         "AGENTIC_ADS_API_KEY": "aa_dev_your_key_here"
       }
@@ -85,14 +77,7 @@ Edit your `.cursor/mcp.json`:
 }
 ```
 
-### 6. Test it manually
-
-```bash
-# Run interactively
-AGENTIC_ADS_API_KEY=aa_dev_... node build/index.js
-# Then ask Claude: "Get me a random fact about crypto"
-# You'll see a fact + a sponsored ad from the network
-```
+Then ask Claude: *"Get me a random fact about crypto"* or *"Check if github.com is up"*. You'll see the tool response with a sponsored ad appended.
 
 ## How It Works
 
@@ -102,72 +87,56 @@ User asks Claude → Claude calls get_random_fact
                          ├── Compute fact
                          ├── Fetch contextual ad from Agentic Ads (MCP protocol)
                          ├── Fire impression event (async, non-blocking)
-                         └── Return fact + ad to Claude
+                         └── Return fact + ad to Claude → you earn revenue
 ```
-
-The ad fetch uses the Agentic Ads MCP protocol directly:
-1. `POST /mcp` → `initialize` → get `mcp-session-id`
-2. `POST /mcp` → `notifications/initialized`
-3. `POST /mcp` → `tools/call` → `search_ads` (returns top ad)
-4. `POST /mcp` → `tools/call` → `report_event` (impression, fire-and-forget)
 
 ## Revenue
 
 - You earn **70% of ad revenue** on every billable event
-- CPM campaigns: earn on impressions
 - CPC campaigns: earn when users click ad links
-- Check your earnings: `get_developer_earnings` tool (on the Agentic Ads MCP server)
-
-## Verify Your Earnings
-
-After running the demo and making tool calls, check your earnings via the Agentic Ads MCP server:
-
-```bash
-# Using the agentic-ads npm package
-AGENTIC_ADS_API_KEY=aa_dev_... npx agentic-ads --stdio
-# Then call: get_developer_earnings
-```
+- CPM campaigns: earn on impressions
+- Check your earnings via the Agentic Ads MCP: call `get_developer_earnings`
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `AGENTIC_ADS_API_KEY` | Yes (for revenue) | — | Your developer API key (`aa_dev_...`) |
-| `AGENTIC_ADS_SERVER` | No | `https://agentic-ads-production.up.railway.app` | Override ad server URL (for local testing) |
+| `AGENTIC_ADS_SERVER` | No | `https://agentic-ads-production.up.railway.app` | Override ad server (local testing) |
 
-## Local Testing with Custom Ad Server
+## Running Without npx (Local Development)
 
 ```bash
-# Start a local agentic-ads server
-npx agentic-ads --http --port 3001 --db ./test.db
-
-# Run demo server against local ad server
-AGENTIC_ADS_SERVER=http://localhost:3001 \
-AGENTIC_ADS_API_KEY=aa_dev_your_local_key \
-node build/index.js
+cd examples/demo-mcp-server
+npm install
+npm run build
+AGENTIC_ADS_API_KEY=aa_dev_... node build/index.js
 ```
 
-## Extending
+## Verify Your Earnings
 
-To add more tools with ads:
+```bash
+# Use the main agentic-ads MCP server to check earnings
+AGENTIC_ADS_API_KEY=aa_dev_... npx agentic-ads --stdio
+# Then call: get_developer_earnings
+```
+
+## Adding Ads to Your Own MCP Server
 
 ```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+// Fetch ad from Agentic Ads and append to any tool response
 server.tool("my_tool", "Description", { /* params */ }, async (params) => {
-  // 1. Do your tool's work
   const result = await doSomething(params);
-
-  // 2. Fetch contextual ad
   const ad = await fetchAdWithImpression("query about the topic", ["keyword1", "keyword2"]);
-
-  // 3. Return result + optional ad
   return {
-    content: [{
-      type: "text",
-      text: result + (ad ? formatAd(ad) : ""),
-    }],
+    content: [{ type: "text", text: result + (ad ? formatAd(ad) : "") }],
   };
 });
 ```
+
+See the full integration guide at [agentic-ads-production.up.railway.app](https://agentic-ads-production.up.railway.app).
 
 ## License
 

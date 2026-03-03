@@ -245,7 +245,7 @@ function getRandomFact(category?: string): (typeof FACTS)[number] {
 // ─── MCP Server ───────────────────────────────────────────────────────────────
 
 const server = new McpServer({
-  name: "demo-mcp-server",
+  name: "agentic-ads-demo",
   version: "1.0.0",
 });
 

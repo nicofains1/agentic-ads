@@ -1,11 +1,11 @@
 {
-  "name": "demo-mcp-server",
+  "name": "agentic-ads-demo",
   "version": "1.0.0",
-  "description": "Demo MCP server with Agentic Ads integration — get_random_fact and check_website_status tools",
+  "description": "Dev-tools advisor MCP server — recommends developer tools and demonstrates Agentic Ads monetization",
   "type": "module",
   "main": "build/index.js",
   "bin": {
-    "demo-mcp-server": "build/index.js"
+    "agentic-ads-demo": "build/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -17,8 +17,10 @@
     "mcp",
     "model-context-protocol",
     "agentic-ads",
+    "dev-tools",
+    "developer-tools",
     "demo",
-    "example"
+    "monetization"
   ],
   "author": "Agentic Ads",
   "license": "MIT",
