@@ -50,11 +50,11 @@ console.error(`[agentic-ads] Database initialized at: ${dbPath}`);
 // ─── Auto-Seed Production DB ─────────────────────────────────────────────────
 
 function autoSeed() {
-  const advCount = (db.prepare('SELECT COUNT(*) as c FROM advertisers').get() as { c: number }).c;
-  const devCount = (db.prepare('SELECT COUNT(*) as c FROM developers').get() as { c: number }).c;
-  if (advCount > 0 || devCount > 0) return; // Already seeded or pre-populated
+  // Check by signature advertiser name to avoid skipping when DB has unrelated/test data (#122)
+  const alreadySeeded = (db.prepare("SELECT COUNT(*) as c FROM advertisers WHERE name = 'OnlySwaps'").get() as { c: number }).c;
+  if (alreadySeeded > 0) return; // Production campaigns already present
 
-  console.error('[agentic-ads] Empty database detected — auto-seeding production campaigns...');
+  console.error('[agentic-ads] Production campaigns not found — auto-seeding...');
 
   // OnlySwaps — Web3 token swapper
   const onlyswaps = createAdvertiser(db, {
@@ -217,7 +217,7 @@ function autoSeed() {
   createAd(db, {
     campaign_id: doCampaign.id,
     creative_text: 'Deploy apps, databases, and Kubernetes on DigitalOcean. Developer-friendly cloud starting at $4/month. $200 free credit for new users.',
-    link_url: 'https://www.digitalocean.com',
+    link_url: 'https://m.do.co/c/af5c18972daf',
     keywords: ['vps', 'cloud hosting', 'digitalocean', 'droplet', 'kubernetes', 'managed postgres', 'cloud server'],
     categories: ['hosting', 'cloud', 'infrastructure'],
     geo: 'ALL',
@@ -226,7 +226,7 @@ function autoSeed() {
   createAd(db, {
     campaign_id: doCampaign.id,
     creative_text: 'DigitalOcean App Platform: deploy from GitHub, auto-scales, managed SSL. Skip the AWS complexity. Simple pricing, great documentation.',
-    link_url: 'https://www.digitalocean.com/products/app-platform',
+    link_url: 'https://m.do.co/c/af5c18972daf',
     keywords: ['app platform', 'heroku alternative', 'github deploy', 'managed hosting', 'paas'],
     categories: ['hosting', 'deployment', 'paas'],
     geo: 'ALL',
