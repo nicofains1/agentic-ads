@@ -328,6 +328,163 @@ function autoSeed() {
     });
   }
 
+  // ── Crypto Exchange Affiliate Campaigns ────────────────────────────────────
+  // CPA model: exchanges pay high commissions per verified signup (KYC + first trade).
+  // Set env vars to activate real affiliate links:
+  //   BINANCE_REFERRAL_CODE, COINBASE_REF_CODE, KRAKEN_REFERRAL_ID, BYBIT_REF_CODE
+
+  // Binance — World's largest crypto exchange (41–50% revenue share on trading fees, lifetime)
+  // Apply: https://www.binance.com/en/activity/affiliate (requires 5K+ followers)
+  const binanceUrl = process.env.BINANCE_REFERRAL_CODE
+    ? `https://www.binance.com/en/register?ref=${process.env.BINANCE_REFERRAL_CODE}`
+    : 'https://www.binance.com/en/register?ref=PENDING';
+  const { id: binanceId, created: binanceNew } = ensureAdvertiser('Binance', 'Binance Holdings Ltd.', 'affiliates@binance.com');
+  if (binanceNew) {
+    const binanceCampaign = createCampaign(db, {
+      advertiser_id: binanceId,
+      name: 'Binance — World\'s #1 Crypto Exchange',
+      objective: 'conversions',
+      total_budget: 500,
+      daily_budget: 25,
+      pricing_model: 'cpa',
+      bid_amount: 2.00,
+      start_date: '2026-01-01',
+      end_date: '2026-12-31',
+    });
+    createAd(db, {
+      campaign_id: binanceCampaign.id,
+      creative_text: 'Trade 350+ cryptocurrencies on Binance, the world\'s largest exchange. Low fees, deep liquidity, spot & futures trading. Sign up and get up to $600 in rewards.',
+      link_url: binanceUrl,
+      keywords: ['crypto exchange', 'buy bitcoin', 'binance', 'cryptocurrency trading', 'bitcoin exchange', 'crypto market'],
+      categories: ['finance', 'crypto', 'exchange'],
+      geo: 'ALL',
+      language: 'en',
+    });
+    createAd(db, {
+      campaign_id: binanceCampaign.id,
+      creative_text: 'Binance offers spot, futures, staking, and DeFi in one platform. 0.1% maker/taker fees, 600+ pairs, 24/7 support. Start trading crypto today.',
+      link_url: binanceUrl,
+      keywords: ['swap tokens', 'defi trading', 'crypto futures', 'staking', 'binance futures', 'altcoin trading'],
+      categories: ['finance', 'crypto', 'exchange'],
+      geo: 'ALL',
+      language: 'en',
+    });
+  }
+
+  // Coinbase — Most trusted US crypto exchange (50% of trading fees, first 3 months only)
+  // Apply: https://www.coinbase.com/affiliates via Impact Radius (requires ~45K monthly visitors)
+  const coinbaseUrl = process.env.COINBASE_REF_CODE
+    ? `https://coinbase.com/join/${process.env.COINBASE_REF_CODE}`
+    : 'https://coinbase.com/join/PENDING';
+  const { id: coinbaseId, created: coinbaseNew } = ensureAdvertiser('Coinbase', 'Coinbase Global Inc.', 'affiliates@coinbase.com');
+  if (coinbaseNew) {
+    const coinbaseCampaign = createCampaign(db, {
+      advertiser_id: coinbaseId,
+      name: 'Coinbase — Buy Crypto Safely',
+      objective: 'conversions',
+      total_budget: 500,
+      daily_budget: 25,
+      pricing_model: 'cpa',
+      bid_amount: 2.00,
+      start_date: '2026-01-01',
+      end_date: '2026-12-31',
+    });
+    createAd(db, {
+      campaign_id: coinbaseCampaign.id,
+      creative_text: 'Buy Bitcoin, Ethereum, and 200+ cryptos on Coinbase — the most trusted US exchange. FDIC-insured USD, regulated, beginner-friendly. Get $10 in BTC on first trade.',
+      link_url: coinbaseUrl,
+      keywords: ['buy bitcoin', 'crypto exchange', 'coinbase', 'buy ethereum', 'cryptocurrency', 'buy crypto'],
+      categories: ['finance', 'crypto', 'exchange'],
+      geo: 'ALL',
+      language: 'en',
+    });
+    createAd(db, {
+      campaign_id: coinbaseCampaign.id,
+      creative_text: 'Coinbase Advanced Trade gives pro traders low fees, advanced charts, and deep liquidity. Access DeFi via Coinbase Wallet. Regulated and secure.',
+      link_url: coinbaseUrl,
+      keywords: ['crypto trading', 'defi trading', 'coinbase advanced', 'swap tokens', 'bitcoin trading', 'cryptocurrency exchange'],
+      categories: ['finance', 'crypto', 'exchange'],
+      geo: 'ALL',
+      language: 'en',
+    });
+  }
+
+  // Kraken — Professional crypto exchange (20% of trading fees, lifetime, capped $1K/client)
+  // Apply: https://app.impact.com/campaign-promo-signup/Kraken.brand (via Impact, 180-day cookie)
+  const krakenUrl = process.env.KRAKEN_REFERRAL_ID
+    ? `https://www.kraken.com/sign-up?referral=${process.env.KRAKEN_REFERRAL_ID}`
+    : 'https://www.kraken.com/sign-up?referral=PENDING';
+  const { id: krakenId, created: krakenNew } = ensureAdvertiser('Kraken', 'Payward Inc.', 'affiliates@kraken.com');
+  if (krakenNew) {
+    const krakenCampaign = createCampaign(db, {
+      advertiser_id: krakenId,
+      name: 'Kraken — Pro Crypto Trading',
+      objective: 'conversions',
+      total_budget: 500,
+      daily_budget: 25,
+      pricing_model: 'cpa',
+      bid_amount: 2.00,
+      start_date: '2026-01-01',
+      end_date: '2026-12-31',
+    });
+    createAd(db, {
+      campaign_id: krakenCampaign.id,
+      creative_text: 'Kraken: the professional\'s crypto exchange. 200+ assets, spot & margin trading, staking, and institutional-grade security since 2011. Trusted by millions.',
+      link_url: krakenUrl,
+      keywords: ['crypto exchange', 'kraken', 'buy bitcoin', 'margin trading', 'crypto staking', 'professional trading'],
+      categories: ['finance', 'crypto', 'exchange'],
+      geo: 'ALL',
+      language: 'en',
+    });
+    createAd(db, {
+      campaign_id: krakenCampaign.id,
+      creative_text: 'Trade crypto with confidence on Kraken. Low fees starting at 0.16%, NFT marketplace, Kraken Pro for advanced charts. Built for serious traders.',
+      link_url: krakenUrl,
+      keywords: ['defi trading', 'swap tokens', 'cryptocurrency', 'kraken pro', 'crypto portfolio', 'altcoin exchange'],
+      categories: ['finance', 'crypto', 'exchange'],
+      geo: 'ALL',
+      language: 'en',
+    });
+  }
+
+  // Bybit — Fast-growing derivatives exchange (30–50% of trading fees, lifetime, no cap) ← BEST
+  // Apply: https://partner.bybit.com (easiest approval, ~24h, no follower minimum)
+  const bybitUrl = process.env.BYBIT_REF_CODE
+    ? `https://www.bybit.com/invite?ref=${process.env.BYBIT_REF_CODE}`
+    : 'https://www.bybit.com/invite?ref=PENDING';
+  const { id: bybitId, created: bybitNew } = ensureAdvertiser('Bybit', 'Bybit Fintech Ltd.', 'affiliates@bybit.com');
+  if (bybitNew) {
+    const bybitCampaign = createCampaign(db, {
+      advertiser_id: bybitId,
+      name: 'Bybit — Trade Crypto Derivatives',
+      objective: 'conversions',
+      total_budget: 500,
+      daily_budget: 25,
+      pricing_model: 'cpa',
+      bid_amount: 2.00,
+      start_date: '2026-01-01',
+      end_date: '2026-12-31',
+    });
+    createAd(db, {
+      campaign_id: bybitCampaign.id,
+      creative_text: 'Bybit: trade Bitcoin and 300+ crypto derivatives with up to 100x leverage. Ultra-fast matching engine, 24/7 live support, and $30,000 welcome bonus.',
+      link_url: bybitUrl,
+      keywords: ['crypto exchange', 'crypto futures', 'bybit', 'bitcoin derivatives', 'defi trading', 'leverage trading'],
+      categories: ['finance', 'crypto', 'exchange'],
+      geo: 'ALL',
+      language: 'en',
+    });
+    createAd(db, {
+      campaign_id: bybitCampaign.id,
+      creative_text: 'Bybit offers spot, futures, options, and copy trading in one app. Zero-fee spot trading, industry-low liquidation fee, and deep liquidity. Sign up free.',
+      link_url: bybitUrl,
+      keywords: ['swap tokens', 'copy trading', 'cryptocurrency', 'bybit spot', 'crypto options', 'buy bitcoin'],
+      categories: ['finance', 'crypto', 'exchange'],
+      geo: 'ALL',
+      language: 'en',
+    });
+  }
+
   // Demo developer for consumers to test (with wallet for on-chain verification)
   const { id: demoId, created: demoNew } = ensureDeveloper('DemoBot', 'demo@agentic-ads.com');
   if (demoNew) {
@@ -339,7 +496,7 @@ function autoSeed() {
     console.error(`  DemoBot wallet: ${demoWallet} (referral: ${demoReferral})`);
   }
 
-  const newCount = [onlyswapsNew, agadsNew, railwayNew, vercelNew, doNew, neonNew, supabaseNew, demoNew].filter(Boolean).length;
+  const newCount = [onlyswapsNew, agadsNew, railwayNew, vercelNew, doNew, neonNew, supabaseNew, binanceNew, coinbaseNew, krakenNew, bybitNew, demoNew].filter(Boolean).length;
   if (newCount > 0) {
     console.error(`[agentic-ads] Auto-seed complete: ${newCount} new advertisers/developers added.`);
     console.error(`  See docs/affiliate-programs.md to swap in real affiliate links`);
