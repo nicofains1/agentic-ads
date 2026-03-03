@@ -134,10 +134,23 @@ function autoSeed() {
   });
 
   // ── Developer Tool Affiliate Campaigns ──────────────────────────────────────
-  // NOTE: link_url uses direct product URLs until affiliate links are approved.
+  // NOTE: link_url uses affiliate URLs where available, direct product URLs otherwise.
   // See docs/affiliate-programs.md for signup info and CPC rationale.
+  // RAILWAY_REFERRAL_CODE env var: set to your Railway referral code to earn 15%/12mo.
+  // Get it at: https://railway.com/affiliate-program (instant, no approval needed)
 
   // Railway — Backend deployment (15% commission, no approval needed)
+  // Affiliate link format: https://railway.com?referralCode=YOUR_CODE
+  const railwayReferralCode = process.env.RAILWAY_REFERRAL_CODE ?? '';
+  const railwayUrl = railwayReferralCode
+    ? `https://railway.com?referralCode=${railwayReferralCode}`
+    : 'https://railway.com';
+  if (railwayReferralCode) {
+    console.error(`[agentic-ads] Railway affiliate link active: ${railwayUrl}`);
+  } else {
+    console.error('[agentic-ads] RAILWAY_REFERRAL_CODE not set — using direct URL. Set env var to activate affiliate link ($36/yr per signup). See: https://railway.com/affiliate-program');
+  }
+
   const railway = createAdvertiser(db, { name: 'Railway', company: 'Railway Corp.', email: 'affiliates@railway.com' });
   const railwayCampaign = createCampaign(db, {
     advertiser_id: railway.id,
@@ -153,7 +166,7 @@ function autoSeed() {
   createAd(db, {
     campaign_id: railwayCampaign.id,
     creative_text: 'Deploy backends, databases, and workers on Railway. Git push to deploy. Postgres, Redis, and MySQL included. $5/month hobby plan.',
-    link_url: 'https://railway.com',
+    link_url: railwayUrl,
     keywords: ['backend hosting', 'deploy nodejs', 'railway app', 'docker deploy', 'postgres hosting', 'redis hosting'],
     categories: ['hosting', 'deployment', 'backend'],
     geo: 'ALL',
@@ -162,7 +175,7 @@ function autoSeed() {
   createAd(db, {
     campaign_id: railwayCampaign.id,
     creative_text: 'Stop wrestling with AWS. Railway gives you Heroku simplicity with modern infra. Deploy any Docker container, scale on demand, sleep to zero.',
-    link_url: 'https://railway.com',
+    link_url: railwayUrl,
     keywords: ['heroku alternative', 'railway platform', 'deploy docker', 'container hosting', 'serverless backend'],
     categories: ['hosting', 'deployment'],
     geo: 'ALL',

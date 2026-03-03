@@ -10,11 +10,11 @@
  * - check_website_status: Checks if a website is reachable (HTTP HEAD request)
  *
  * On every tool call, it fetches a contextual ad from the Agentic Ads network
- * (https://agentic-ads.fly.dev/mcp) and appends it to the tool response.
+ * (https://agentic-ads-production.up.railway.app/mcp) and appends it to the tool response.
  * It then fires an impression event so you earn revenue.
  *
  * Setup:
- *   1. Register: POST https://agentic-ads.fly.dev/api/register
+ *   1. Register: POST https://agentic-ads-production.up.railway.app/api/register
  *                Body: { "name": "My Bot", "email": "me@example.com" }
  *                Returns: { "api_key": "aa_dev_..." }
  *   2. Set env var: export AGENTIC_ADS_API_KEY=aa_dev_...
@@ -26,7 +26,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const AGENTIC_ADS_SERVER = process.env.AGENTIC_ADS_SERVER ?? "https://agentic-ads.fly.dev";
+const AGENTIC_ADS_SERVER = process.env.AGENTIC_ADS_SERVER ?? "https://agentic-ads-production.up.railway.app";
 const DEVELOPER_API_KEY  = process.env.AGENTIC_ADS_API_KEY ?? "";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -382,7 +382,7 @@ async function main(): Promise<void> {
     console.error(
       "[demo-mcp] AGENTIC_ADS_API_KEY not set.\n" +
       "[demo-mcp] Tools will work but ads/revenue tracking is disabled.\n" +
-      "[demo-mcp] Register at: POST https://agentic-ads.fly.dev/api/register\n" +
+      "[demo-mcp] Register at: POST https://agentic-ads-production.up.railway.app/api/register\n" +
       '[demo-mcp] Body: { "name": "My Bot", "email": "me@example.com" }',
     );
   } else {

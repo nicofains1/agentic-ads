@@ -1,6 +1,6 @@
 # Demo MCP Server with Agentic Ads
 
-A working MCP server that demonstrates how to monetize your MCP tools using [Agentic Ads](https://agentic-ads.fly.dev) — the ad network for AI agents.
+A working MCP server that demonstrates how to monetize your MCP tools using [Agentic Ads](https://agentic-ads-production.up.railway.app) — the ad network for AI agents.
 
 ## What It Does
 
@@ -29,7 +29,7 @@ npm run build
 ### 2. Get your API key
 
 ```bash
-curl -X POST https://agentic-ads.fly.dev/api/register \
+curl -X POST https://agentic-ads-production.up.railway.app/api/register \
   -H "Content-Type: application/json" \
   -d '{"name": "My Bot", "email": "me@example.com"}'
 ```
@@ -39,7 +39,7 @@ Response:
 {
   "developer_id": "...",
   "api_key": "aa_dev_...",
-  "mcp_url": "https://agentic-ads.fly.dev/mcp"
+  "mcp_url": "https://agentic-ads-production.up.railway.app/mcp"
 }
 ```
 
@@ -133,7 +133,7 @@ AGENTIC_ADS_API_KEY=aa_dev_... npx agentic-ads --stdio
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `AGENTIC_ADS_API_KEY` | Yes (for revenue) | — | Your developer API key (`aa_dev_...`) |
-| `AGENTIC_ADS_SERVER` | No | `https://agentic-ads.fly.dev` | Override ad server URL (for local testing) |
+| `AGENTIC_ADS_SERVER` | No | `https://agentic-ads-production.up.railway.app` | Override ad server URL (for local testing) |
 
 ## Local Testing with Custom Ad Server
 
