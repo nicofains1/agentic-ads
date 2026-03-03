@@ -328,108 +328,6 @@ function autoSeed() {
     });
   }
 
-  // Clerk — Authentication (Creators partnership program)
-  const { id: clerkId, created: clerkNew } = ensureAdvertiser('Clerk', 'Clerk Inc.', 'creators@clerk.com');
-  if (clerkNew) {
-    const clerkCampaign = createCampaign(db, {
-      advertiser_id: clerkId,
-      name: 'Clerk — Auth That Just Works',
-      objective: 'conversions',
-      total_budget: 150,
-      daily_budget: 10,
-      pricing_model: 'cpc',
-      bid_amount: 0.25,
-      start_date: '2026-01-01',
-      end_date: '2026-12-31',
-    });
-    createAd(db, {
-      campaign_id: clerkCampaign.id,
-      creative_text: 'Add auth to your app in 5 minutes with Clerk. Social login, magic links, MFA, and user management out of the box. Free up to 10,000 MAU.',
-      link_url: 'https://clerk.com',
-      keywords: ['authentication', 'auth', 'login', 'clerk', 'user management', 'sso', 'magic link', 'mfa'],
-      categories: ['auth', 'authentication', 'security'],
-      geo: 'ALL',
-      language: 'en',
-    });
-    createAd(db, {
-      campaign_id: clerkCampaign.id,
-      creative_text: 'Clerk handles auth so you can ship features. Pre-built UI components, React hooks, and middleware for Next.js, Remix, and Astro.',
-      link_url: 'https://clerk.com',
-      keywords: ['nextjs auth', 'react auth', 'clerk nextjs', 'authentication nextjs', 'auth provider', 'jwt'],
-      categories: ['auth', 'frontend'],
-      geo: 'ALL',
-      language: 'en',
-    });
-  }
-
-  // Upstash — Serverless Redis & Kafka (direct outreach pending)
-  const { id: upstashId, created: upstashNew } = ensureAdvertiser('Upstash', 'Upstash Inc.', 'hello@upstash.com');
-  if (upstashNew) {
-    const upstashCampaign = createCampaign(db, {
-      advertiser_id: upstashId,
-      name: 'Upstash — Serverless Redis & Kafka',
-      objective: 'traffic',
-      total_budget: 150,
-      daily_budget: 8,
-      pricing_model: 'cpc',
-      bid_amount: 0.20,
-      start_date: '2026-01-01',
-      end_date: '2026-12-31',
-    });
-    createAd(db, {
-      campaign_id: upstashCampaign.id,
-      creative_text: 'Serverless Redis with per-request pricing. Rate limiting, caching, session storage on Upstash — no idle costs. Free: 10K commands/day.',
-      link_url: 'https://upstash.com',
-      keywords: ['redis', 'serverless redis', 'caching', 'rate limiting', 'session storage', 'upstash', 'kv store'],
-      categories: ['caching', 'database', 'serverless'],
-      geo: 'ALL',
-      language: 'en',
-    });
-    createAd(db, {
-      campaign_id: upstashCampaign.id,
-      creative_text: 'Upstash QStash: HTTP message queue for serverless. Schedule jobs, fan out events, and retry failures — no infrastructure to manage.',
-      link_url: 'https://upstash.com/qstash',
-      keywords: ['message queue', 'job queue', 'qstash', 'cron jobs', 'background jobs', 'serverless queue', 'webhook queue'],
-      categories: ['queue', 'background-jobs', 'serverless'],
-      geo: 'ALL',
-      language: 'en',
-    });
-  }
-
-  // Sentry — Error monitoring & performance (direct outreach pending)
-  const { id: sentryId, created: sentryNew } = ensureAdvertiser('Sentry', 'Sentry Inc.', 'partnerships@sentry.io');
-  if (sentryNew) {
-    const sentryCampaign = createCampaign(db, {
-      advertiser_id: sentryId,
-      name: 'Sentry — Fix Bugs Before Users Notice',
-      objective: 'awareness',
-      total_budget: 150,
-      daily_budget: 8,
-      pricing_model: 'cpc',
-      bid_amount: 0.25,
-      start_date: '2026-01-01',
-      end_date: '2026-12-31',
-    });
-    createAd(db, {
-      campaign_id: sentryCampaign.id,
-      creative_text: 'Catch errors in production before your users do. Sentry gives you full-stack error tracking, performance monitoring, and session replays. Free for small teams.',
-      link_url: 'https://sentry.io',
-      keywords: ['error tracking', 'sentry', 'monitoring', 'debugging', 'crash reporting', 'performance monitoring', 'apm'],
-      categories: ['monitoring', 'observability', 'developer-tools'],
-      geo: 'ALL',
-      language: 'en',
-    });
-    createAd(db, {
-      campaign_id: sentryCampaign.id,
-      creative_text: 'Sentry AI surfaces the exact code change that caused an error. Ship faster, debug smarter. 5K errors/month free.',
-      link_url: 'https://sentry.io',
-      keywords: ['root cause analysis', 'error monitoring', 'ai debugging', 'stack trace', 'sentry ai', 'bug tracking'],
-      categories: ['monitoring', 'ai', 'developer-tools'],
-      geo: 'ALL',
-      language: 'en',
-    });
-  }
-
   // Demo developer for consumers to test (with wallet for on-chain verification)
   const { id: demoId, created: demoNew } = ensureDeveloper('DemoBot', 'demo@agentic-ads.com');
   if (demoNew) {
@@ -441,7 +339,7 @@ function autoSeed() {
     console.error(`  DemoBot wallet: ${demoWallet} (referral: ${demoReferral})`);
   }
 
-  const newCount = [onlyswapsNew, agadsNew, railwayNew, vercelNew, doNew, neonNew, supabaseNew, clerkNew, upstashNew, sentryNew, demoNew].filter(Boolean).length;
+  const newCount = [onlyswapsNew, agadsNew, railwayNew, vercelNew, doNew, neonNew, supabaseNew, demoNew].filter(Boolean).length;
   if (newCount > 0) {
     console.error(`[agentic-ads] Auto-seed complete: ${newCount} new advertisers/developers added.`);
     console.error(`  See docs/affiliate-programs.md to swap in real affiliate links`);
