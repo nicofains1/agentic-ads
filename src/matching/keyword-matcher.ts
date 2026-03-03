@@ -89,7 +89,10 @@ export function matchAds(query: SearchQuery, ads: AdCandidate[]): MatchResult[] 
           if (!exact_keyword_matches.includes(ak)) {
             exact_keyword_matches.push(ak);
           }
-        } else if (ak.includes(qk) || qk.includes(ak)) {
+        } else if (qk.length >= 4 && (ak.includes(qk) || qk.includes(ak))) {
+          // Require query keyword >= 4 chars for partial matching to prevent
+          // short generic terms (e.g. "ads", "dev") from false-positive matching
+          // long ad keywords (e.g. "adsense for ai"). Fixes #124.
           if (!partial_keyword_matches.includes(ak)) {
             partial_keyword_matches.push(ak);
           }
