@@ -133,6 +133,266 @@ function autoSeed() {
     language: 'en',
   });
 
+  // ── Developer Tool Affiliate Campaigns ──────────────────────────────────────
+  // NOTE: link_url uses direct product URLs until affiliate links are approved.
+  // See docs/affiliate-programs.md for signup info and CPC rationale.
+
+  // Railway — Backend deployment (15% commission, no approval needed)
+  const railway = createAdvertiser(db, { name: 'Railway', company: 'Railway Corp.', email: 'affiliates@railway.com' });
+  const railwayCampaign = createCampaign(db, {
+    advertiser_id: railway.id,
+    name: 'Railway — Infrastructure for Builders',
+    objective: 'conversions',
+    total_budget: 300,
+    daily_budget: 15,
+    pricing_model: 'cpc',
+    bid_amount: 0.40,
+    start_date: '2026-01-01',
+    end_date: '2026-12-31',
+  });
+  createAd(db, {
+    campaign_id: railwayCampaign.id,
+    creative_text: 'Deploy backends, databases, and workers on Railway. Git push to deploy. Postgres, Redis, and MySQL included. $5/month hobby plan.',
+    link_url: 'https://railway.com',
+    keywords: ['backend hosting', 'deploy nodejs', 'railway app', 'docker deploy', 'postgres hosting', 'redis hosting'],
+    categories: ['hosting', 'deployment', 'backend'],
+    geo: 'ALL',
+    language: 'en',
+  });
+  createAd(db, {
+    campaign_id: railwayCampaign.id,
+    creative_text: 'Stop wrestling with AWS. Railway gives you Heroku simplicity with modern infra. Deploy any Docker container, scale on demand, sleep to zero.',
+    link_url: 'https://railway.com',
+    keywords: ['heroku alternative', 'railway platform', 'deploy docker', 'container hosting', 'serverless backend'],
+    categories: ['hosting', 'deployment'],
+    geo: 'ALL',
+    language: 'en',
+  });
+
+  // Vercel — Frontend deployment ($10/signup + 5% recurring)
+  const vercel = createAdvertiser(db, { name: 'Vercel', company: 'Vercel Inc.', email: 'affiliates@vercel.com' });
+  const vercelCampaign = createCampaign(db, {
+    advertiser_id: vercel.id,
+    name: 'Vercel — Deploy Faster',
+    objective: 'conversions',
+    total_budget: 200,
+    daily_budget: 10,
+    pricing_model: 'cpc',
+    bid_amount: 0.25,
+    start_date: '2026-01-01',
+    end_date: '2026-12-31',
+  });
+  createAd(db, {
+    campaign_id: vercelCampaign.id,
+    creative_text: 'Deploy your frontend in seconds with Vercel. Zero-config CI/CD, global edge network, and automatic preview deployments. Free tier available.',
+    link_url: 'https://vercel.com/signup',
+    keywords: ['deploy', 'hosting', 'frontend', 'nextjs', 'react', 'serverless', 'jamstack', 'ci/cd'],
+    categories: ['hosting', 'deployment', 'frontend'],
+    geo: 'ALL',
+    language: 'en',
+  });
+  createAd(db, {
+    campaign_id: vercelCampaign.id,
+    creative_text: 'Next.js, SvelteKit, Nuxt, Remix — Vercel deploys any framework instantly. Preview URLs on every push. Scales to millions automatically.',
+    link_url: 'https://vercel.com/signup',
+    keywords: ['nextjs hosting', 'vercel deploy', 'preview deployments', 'edge functions', 'sveltekit hosting'],
+    categories: ['hosting', 'deployment'],
+    geo: 'ALL',
+    language: 'en',
+  });
+
+  // DigitalOcean — Cloud infrastructure (10% recurring for 12 months via CJ Affiliate)
+  const digitalocean = createAdvertiser(db, { name: 'DigitalOcean', company: 'DigitalOcean LLC', email: 'affiliates@digitalocean.com' });
+  const doCampaign = createCampaign(db, {
+    advertiser_id: digitalocean.id,
+    name: 'DigitalOcean — Simple Cloud Infrastructure',
+    objective: 'conversions',
+    total_budget: 300,
+    daily_budget: 15,
+    pricing_model: 'cpc',
+    bid_amount: 0.30,
+    start_date: '2026-01-01',
+    end_date: '2026-12-31',
+  });
+  createAd(db, {
+    campaign_id: doCampaign.id,
+    creative_text: 'Deploy apps, databases, and Kubernetes on DigitalOcean. Developer-friendly cloud starting at $4/month. $200 free credit for new users.',
+    link_url: 'https://www.digitalocean.com',
+    keywords: ['vps', 'cloud hosting', 'digitalocean', 'droplet', 'kubernetes', 'managed postgres', 'cloud server'],
+    categories: ['hosting', 'cloud', 'infrastructure'],
+    geo: 'ALL',
+    language: 'en',
+  });
+  createAd(db, {
+    campaign_id: doCampaign.id,
+    creative_text: 'DigitalOcean App Platform: deploy from GitHub, auto-scales, managed SSL. Skip the AWS complexity. Simple pricing, great documentation.',
+    link_url: 'https://www.digitalocean.com/products/app-platform',
+    keywords: ['app platform', 'heroku alternative', 'github deploy', 'managed hosting', 'paas'],
+    categories: ['hosting', 'deployment', 'paas'],
+    geo: 'ALL',
+    language: 'en',
+  });
+
+  // Neon — Serverless Postgres ($10 per referred user via open-source program)
+  const neon = createAdvertiser(db, { name: 'Neon', company: 'Neon Inc.', email: 'affiliates@neon.tech' });
+  const neonCampaign = createCampaign(db, {
+    advertiser_id: neon.id,
+    name: 'Neon — Serverless Postgres',
+    objective: 'conversions',
+    total_budget: 200,
+    daily_budget: 10,
+    pricing_model: 'cpc',
+    bid_amount: 0.15,
+    start_date: '2026-01-01',
+    end_date: '2026-12-31',
+  });
+  createAd(db, {
+    campaign_id: neonCampaign.id,
+    creative_text: 'Serverless Postgres that scales to zero. Neon gives you database branching for every Git branch, autoscaling, and a generous free tier.',
+    link_url: 'https://neon.tech',
+    keywords: ['postgres', 'serverless database', 'postgresql', 'database branching', 'neon', 'free postgres'],
+    categories: ['database', 'postgres', 'serverless'],
+    geo: 'ALL',
+    language: 'en',
+  });
+  createAd(db, {
+    campaign_id: neonCampaign.id,
+    creative_text: "Instant Postgres for AI apps. Neon's pgvector support makes it the go-to database for embeddings and RAG. Scale to zero between requests.",
+    link_url: 'https://neon.tech',
+    keywords: ['pgvector', 'ai database', 'vector database', 'embeddings', 'rag database', 'postgres ai'],
+    categories: ['database', 'ai', 'postgres'],
+    geo: 'ALL',
+    language: 'en',
+  });
+
+  // Supabase — Backend as a Service (partner program, direct outreach pending)
+  const supabase = createAdvertiser(db, { name: 'Supabase', company: 'Supabase Inc.', email: 'partners@supabase.io' });
+  const supabaseCampaign = createCampaign(db, {
+    advertiser_id: supabase.id,
+    name: 'Supabase — The Open Source Firebase',
+    objective: 'conversions',
+    total_budget: 200,
+    daily_budget: 10,
+    pricing_model: 'cpc',
+    bid_amount: 0.20,
+    start_date: '2026-01-01',
+    end_date: '2026-12-31',
+  });
+  createAd(db, {
+    campaign_id: supabaseCampaign.id,
+    creative_text: 'Supabase gives you Postgres + Auth + Storage + Realtime in one platform. Open source, self-hostable, developer-friendly. Free tier always available.',
+    link_url: 'https://supabase.com',
+    keywords: ['supabase', 'firebase alternative', 'postgres', 'backend', 'auth', 'realtime database', 'open source backend'],
+    categories: ['database', 'backend', 'auth'],
+    geo: 'ALL',
+    language: 'en',
+  });
+  createAd(db, {
+    campaign_id: supabaseCampaign.id,
+    creative_text: 'Build your full-stack app on Supabase. Row-level security, instant REST & GraphQL APIs, edge functions, and storage — all on Postgres.',
+    link_url: 'https://supabase.com',
+    keywords: ['supabase auth', 'postgres rls', 'edge functions', 'supabase storage', 'row level security'],
+    categories: ['database', 'auth', 'backend'],
+    geo: 'ALL',
+    language: 'en',
+  });
+
+  // Clerk — Authentication (Creators partnership program)
+  const clerk = createAdvertiser(db, { name: 'Clerk', company: 'Clerk Inc.', email: 'creators@clerk.com' });
+  const clerkCampaign = createCampaign(db, {
+    advertiser_id: clerk.id,
+    name: 'Clerk — Auth That Just Works',
+    objective: 'conversions',
+    total_budget: 150,
+    daily_budget: 10,
+    pricing_model: 'cpc',
+    bid_amount: 0.25,
+    start_date: '2026-01-01',
+    end_date: '2026-12-31',
+  });
+  createAd(db, {
+    campaign_id: clerkCampaign.id,
+    creative_text: 'Add auth to your app in 5 minutes with Clerk. Social login, magic links, MFA, and user management out of the box. Free up to 10,000 MAU.',
+    link_url: 'https://clerk.com',
+    keywords: ['authentication', 'auth', 'login', 'clerk', 'user management', 'sso', 'magic link', 'mfa'],
+    categories: ['auth', 'authentication', 'security'],
+    geo: 'ALL',
+    language: 'en',
+  });
+  createAd(db, {
+    campaign_id: clerkCampaign.id,
+    creative_text: 'Clerk handles auth so you can ship features. Pre-built UI components, React hooks, and middleware for Next.js, Remix, and Astro.',
+    link_url: 'https://clerk.com',
+    keywords: ['nextjs auth', 'react auth', 'clerk nextjs', 'authentication nextjs', 'auth provider', 'jwt'],
+    categories: ['auth', 'frontend'],
+    geo: 'ALL',
+    language: 'en',
+  });
+
+  // Upstash — Serverless Redis & Kafka (direct outreach pending)
+  const upstash = createAdvertiser(db, { name: 'Upstash', company: 'Upstash Inc.', email: 'hello@upstash.com' });
+  const upstashCampaign = createCampaign(db, {
+    advertiser_id: upstash.id,
+    name: 'Upstash — Serverless Redis & Kafka',
+    objective: 'traffic',
+    total_budget: 150,
+    daily_budget: 8,
+    pricing_model: 'cpc',
+    bid_amount: 0.20,
+    start_date: '2026-01-01',
+    end_date: '2026-12-31',
+  });
+  createAd(db, {
+    campaign_id: upstashCampaign.id,
+    creative_text: 'Serverless Redis with per-request pricing. Rate limiting, caching, session storage on Upstash — no idle costs. Free: 10K commands/day.',
+    link_url: 'https://upstash.com',
+    keywords: ['redis', 'serverless redis', 'caching', 'rate limiting', 'session storage', 'upstash', 'kv store'],
+    categories: ['caching', 'database', 'serverless'],
+    geo: 'ALL',
+    language: 'en',
+  });
+  createAd(db, {
+    campaign_id: upstashCampaign.id,
+    creative_text: 'Upstash QStash: HTTP message queue for serverless. Schedule jobs, fan out events, and retry failures — no infrastructure to manage.',
+    link_url: 'https://upstash.com/qstash',
+    keywords: ['message queue', 'job queue', 'qstash', 'cron jobs', 'background jobs', 'serverless queue', 'webhook queue'],
+    categories: ['queue', 'background-jobs', 'serverless'],
+    geo: 'ALL',
+    language: 'en',
+  });
+
+  // Sentry — Error monitoring & performance (direct outreach pending)
+  const sentry = createAdvertiser(db, { name: 'Sentry', company: 'Sentry Inc.', email: 'partnerships@sentry.io' });
+  const sentryCampaign = createCampaign(db, {
+    advertiser_id: sentry.id,
+    name: 'Sentry — Fix Bugs Before Users Notice',
+    objective: 'awareness',
+    total_budget: 150,
+    daily_budget: 8,
+    pricing_model: 'cpc',
+    bid_amount: 0.25,
+    start_date: '2026-01-01',
+    end_date: '2026-12-31',
+  });
+  createAd(db, {
+    campaign_id: sentryCampaign.id,
+    creative_text: 'Catch errors in production before your users do. Sentry gives you full-stack error tracking, performance monitoring, and session replays. Free for small teams.',
+    link_url: 'https://sentry.io',
+    keywords: ['error tracking', 'sentry', 'monitoring', 'debugging', 'crash reporting', 'performance monitoring', 'apm'],
+    categories: ['monitoring', 'observability', 'developer-tools'],
+    geo: 'ALL',
+    language: 'en',
+  });
+  createAd(db, {
+    campaign_id: sentryCampaign.id,
+    creative_text: 'Sentry AI surfaces the exact code change that caused an error. Ship faster, debug smarter. 5K errors/month free.',
+    link_url: 'https://sentry.io',
+    keywords: ['root cause analysis', 'error monitoring', 'ai debugging', 'stack trace', 'sentry ai', 'bug tracking'],
+    categories: ['monitoring', 'ai', 'developer-tools'],
+    geo: 'ALL',
+    language: 'en',
+  });
+
   // Demo developer for consumers to test (with wallet for on-chain verification)
   const demo = createDeveloper(db, { name: 'DemoBot', email: 'demo@agentic-ads.com' });
   const devKey = generateApiKey(db, 'developer', demo.id);
@@ -145,6 +405,8 @@ function autoSeed() {
   console.error(`  Agentic Ads advertiser key: ${agKey}`);
   console.error(`  DemoBot developer key: ${devKey}`);
   console.error(`  DemoBot wallet: ${demoWallet} (referral: ${demoReferral})`);
+  console.error(`  Affiliate campaigns seeded: Railway, Vercel, DigitalOcean, Neon, Supabase, Clerk, Upstash, Sentry`);
+  console.error(`  See docs/affiliate-programs.md to swap in real affiliate links`);
 }
 
 autoSeed();
