@@ -6,3 +6,15 @@ healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
+
+# ─── Persistent SQLite Volume (#118) ─────────────────────────────────────────
+# Railway wipes the container filesystem on every deploy. To persist the SQLite
+# DB across deploys, attach a Railway Volume mounted at /data.
+#
+# Setup (one-time, via Railway CLI):
+#   railway volume add --mount /data
+#
+# The Dockerfile creates /data and sets DATABASE_PATH=/data/agentic-ads.db.
+# Once the volume is attached, the DB file survives redeploys.
+#
+# Verify: after deploying, run: railway run ls /data

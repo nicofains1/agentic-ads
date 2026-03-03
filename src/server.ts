@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 
-import { initDatabase, createAdvertiser, createDeveloper, createCampaign, createAd, updateDeveloperWallet, getDeveloperById, findDeveloperByWallet, createWithdrawal, completeWithdrawal, failWithdrawal, getTotalWithdrawn, getRecentWithdrawal, getDeveloperEarningsTotal } from './db/index.js';
+import { initDatabase, createAdvertiser, createDeveloper, createCampaign, createAd, updateDeveloperWallet, getDeveloperById, findDeveloperByWallet, createWithdrawal, completeWithdrawal, failWithdrawal, getTotalWithdrawn, getRecentWithdrawal, getDeveloperEarningsTotal, getActiveAds } from './db/index.js';
 import { getAdGuidelines } from './tools/consumer/get-guidelines.js';
 import { authenticate, extractKeyFromHeader, generateApiKey, type AuthContext, AuthError } from './auth/middleware.js';
 import { RateLimiter, RateLimitError } from './auth/rate-limiter.js';
@@ -1328,9 +1328,114 @@ async function startHttp() {
       return;
     }
 
+    // ─── REST: GET /api/search ────────────────────────────────────────────────
+    // Convenience endpoint for testing search_ads without MCP tooling.
+    // Usage: GET /api/search?query=shoes&max_results=3&min_relevance=0.3
+    // Auth: optional api_key query param OR Authorization: Bearer <key> header.
+    if (url.pathname === '/api/search' && req.method === 'GET') {
+      // Optional auth (api_key query param or Authorization header)
+      const queryApiKey = url.searchParams.get('api_key');
+      const rawKey = queryApiKey ?? extractKeyFromHeader(req.headers.authorization);
+      let searchAuth: AuthContext | null = null;
+      if (rawKey) {
+        try {
+          searchAuth = authenticate(db, rawKey);
+        } catch (err) {
+          if (err instanceof AuthError) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+            return;
+          }
+          throw err;
+        }
+      }
+
+      // Parse query params
+      const query = url.searchParams.get('query') ?? undefined;
+      const keywordsParam = url.searchParams.get('keywords');
+      const keywords = keywordsParam ? keywordsParam.split(',').map((k) => k.trim()).filter(Boolean) : undefined;
+      const category = url.searchParams.get('category') ?? undefined;
+      const geo = url.searchParams.get('geo') ?? undefined;
+      const language = url.searchParams.get('language') ?? 'en';
+
+      const rawMaxResults = url.searchParams.get('max_results');
+      const maxResults = rawMaxResults ? Math.min(Math.max(parseInt(rawMaxResults, 10) || 3, 1), 10) : 3;
+
+      const rawMinRelevance = url.searchParams.get('min_relevance');
+      const minRelevance = rawMinRelevance ? Math.min(Math.max(parseFloat(rawMinRelevance) || 0, 0), 1) : 0;
+
+      // Require at least one search dimension
+      if (!query && !keywords?.length && !category) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Provide at least one of: query, keywords, category' }));
+        return;
+      }
+
+      const { matchAds: restMatchAds, rankAds: restRankAds } = await import('./matching/index.js');
+
+      const activeAds = getActiveAds(db, { geo, language });
+
+      if (activeAds.length === 0) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ads: [], count: 0 }));
+        return;
+      }
+
+      const candidates = activeAds.map((ad) => {
+        const camp = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(ad.campaign_id) as { bid_amount: number; advertiser_id: string };
+        const adv = db.prepare('SELECT * FROM advertisers WHERE id = ?').get(camp.advertiser_id) as { name: string };
+        return {
+          id: ad.id,
+          campaign_id: ad.campaign_id,
+          creative_text: ad.creative_text,
+          link_url: ad.link_url,
+          keywords: ad.keywords,
+          categories: ad.categories,
+          geo: ad.geo,
+          language: ad.language,
+          quality_score: ad.quality_score,
+          bid_amount: camp.bid_amount,
+          advertiser_name: adv.name,
+        };
+      });
+
+      const matches = restMatchAds({ query, keywords, category, geo, language }, candidates);
+      const ranked = restRankAds(matches, maxResults).filter((ad) => ad.relevance_score >= minRelevance);
+
+      // Enrich with referral links for authenticated developers
+      let developer: { wallet_address: string | null; referral_code: string | null } | null = null;
+      if (searchAuth?.entity_type === 'developer') {
+        developer = getDeveloperById(db, searchAuth.entity_id);
+      }
+
+      const { getAdById: restLookupAd, getCampaignById: restLookupCampaign } = await import('./db/index.js');
+
+      const enriched = ranked.map((ad) => {
+        const adRecord = restLookupAd(db, ad.ad_id);
+        if (!adRecord) return ad;
+        const camp = restLookupCampaign(db, adRecord.campaign_id);
+        if (camp?.verification_type === 'on_chain' && developer?.wallet_address && developer?.referral_code) {
+          return {
+            ...ad,
+            verification_type: 'on_chain' as const,
+            referral_link: buildReferralLink(ad.link_url, developer.referral_code, developer.wallet_address),
+            referral_code: developer.referral_code,
+            conversion_instructions: 'User must transact via referral link. Report conversion with tx_hash and chain_id.',
+          };
+        }
+        return ad;
+      });
+
+      console.error(`[agentic-ads] GET /api/search query="${query ?? ''}" results=${enriched.length} ts=${new Date().toISOString()}`);
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ads: enriched, count: enriched.length }));
+      return;
+    }
+
     // 404 for anything else
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found. Use /mcp for MCP protocol, /health for health check, or POST /api/register to create a developer account.' }));
+    res.end(JSON.stringify({ error: 'Not found. Use /mcp for MCP protocol, /health for health check, POST /api/register to create a developer account, or GET /api/search to search ads.' }));
   });
 
   httpServer.listen(port, () => {
