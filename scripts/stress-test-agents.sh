@@ -7,6 +7,12 @@
 # Usage:
 #   bash scripts/stress-test-agents.sh
 #   bash scripts/stress-test-agents.sh --api-key=<existing_dev_key>  # skip registration
+#   STRESS_TEST_API_KEY=aa_dev_YOURKEY bash scripts/stress-test-agents.sh  # env var (CI/CD)
+#
+# CI/CD setup (run once to get a key, then reuse it):
+#   1. bash scripts/stress-test-agents.sh        # first run — registers, prints key
+#   2. export STRESS_TEST_API_KEY=<key from above>
+#   3. bash scripts/stress-test-agents.sh        # subsequent runs — skips registration
 #
 # Strategy:
 #   This script calls the MCP server directly via HTTP (JSON-RPC) rather than
@@ -36,9 +42,11 @@ REPORT_FILE="docs/stress-test-results.md"
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 START_EPOCH=$(date +%s)
 TMP_DIR=$(mktemp -d)
-CLI_API_KEY=""  # can be set via --api-key to skip registration (avoids 5/hr rate limit)
+# API key: env var > --api-key flag > empty (will register fresh)
+# Set STRESS_TEST_API_KEY in CI to skip the 5/hr registration rate limit (#125)
+CLI_API_KEY="${STRESS_TEST_API_KEY:-}"
 
-# Parse args
+# Parse args (flag overrides env var)
 for arg in "$@"; do
   case "$arg" in
     --api-key=*) CLI_API_KEY="${arg#*=}" ;;
