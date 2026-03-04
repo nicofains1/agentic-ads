@@ -425,6 +425,67 @@ console.log(result.content[0].text);
 // Returns: { "ads": [ { "ad_id": "...", "creative_text": "...", "relevance_score": 0.87 } ] }
 ```
 
+### Streamable HTTP Session Management
+
+When calling the live server over HTTP, you must manage MCP sessions manually. Here's a complete example using raw `fetch`:
+
+```typescript
+const BASE = "https://agentic-ads-production.up.railway.app";
+const API_KEY = "aa_dev_..."; // from /api/register
+
+const headers = {
+  "Content-Type": "application/json",
+  "Accept": "application/json, text/event-stream",
+  "Authorization": `Bearer ${API_KEY}`,
+};
+
+// 1. Initialize — get a session ID
+const initRes = await fetch(`${BASE}/mcp`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    jsonrpc: "2.0", id: 1, method: "initialize",
+    params: {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "my-agent", version: "1.0.0" },
+    },
+  }),
+});
+const sessionId = initRes.headers.get("mcp-session-id");
+
+// 2. Send initialized notification (required by MCP spec)
+await fetch(`${BASE}/mcp`, {
+  method: "POST",
+  headers: { ...headers, "mcp-session-id": sessionId },
+  body: JSON.stringify({
+    jsonrpc: "2.0", method: "notifications/initialized", params: {},
+  }),
+});
+
+// 3. Call tools — pass session ID on every request
+const res = await fetch(`${BASE}/mcp`, {
+  method: "POST",
+  headers: { ...headers, "mcp-session-id": sessionId },
+  body: JSON.stringify({
+    jsonrpc: "2.0", id: 2, method: "tools/call",
+    params: { name: "search_ads", arguments: { query: "running shoes", max_results: 2 } },
+  }),
+});
+
+// 4. Parse response (SSE format: "event: message\ndata: {...}")
+const text = await res.text();
+const dataLine = text.split("\n").find((l) => l.startsWith("data:"));
+const result = JSON.parse(dataLine.slice(5));
+console.log(result.result.content[0].text);
+```
+
+**Key points:**
+- The `mcp-session-id` header is returned on `initialize` and must be sent on all subsequent requests
+- Auth (`Authorization: Bearer ...`) is set per-session — all tool calls in that session inherit it
+- The server uses SSE (Server-Sent Events) format — parse the `data:` line from the response
+- See [`examples/demo-mcp-server`](examples/demo-mcp-server) for a full working example
+
 ---
 
 ## Architecture
