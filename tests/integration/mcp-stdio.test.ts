@@ -1160,7 +1160,13 @@ describe('MCP Integration: stdio transport', () => {
       const emptyDevKey = (await import('../../src/auth/middleware.js')).generateApiKey(emptyDb, 'developer', emptyDev.id);
       emptyDb.close();
 
-      const client = await createMcpClient(emptyDbPath, emptyDevKey);
+      const transport = new StdioClientTransport({
+        command: 'node',
+        args: [SERVER_PATH, '--stdio', '--db', emptyDbPath, '--api-key', emptyDevKey],
+        env: { ...process.env, NO_AUTO_SEED: '1' },
+      });
+      const client = new Client({ name: 'integration-test', version: '1.0.0' });
+      await client.connect(transport);
       try {
         const result = await client.callTool({
           name: 'search_ads',
