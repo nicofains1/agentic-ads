@@ -19,10 +19,11 @@ const SERVER_PATH = resolve('dist/server.js');
 
 // ─── Helper: create MCP client connected to server via stdio ──────────────────
 
-async function createMcpClient(dbPath: string, apiKey: string): Promise<Client> {
+async function createMcpClient(dbPath: string, apiKey: string, env?: Record<string, string>): Promise<Client> {
   const transport = new StdioClientTransport({
     command: 'node',
     args: [SERVER_PATH, '--stdio', '--db', dbPath, '--api-key', apiKey],
+    env: { ...process.env, ...env },
   });
   const client = new Client({ name: 'integration-test', version: '1.0.0' });
   await client.connect(transport);
@@ -1160,7 +1161,7 @@ describe('MCP Integration: stdio transport', () => {
       const emptyDevKey = (await import('../../src/auth/middleware.js')).generateApiKey(emptyDb, 'developer', emptyDev.id);
       emptyDb.close();
 
-      const client = await createMcpClient(emptyDbPath, emptyDevKey);
+      const client = await createMcpClient(emptyDbPath, emptyDevKey, { NO_AUTO_SEED: '1' });
       try {
         const result = await client.callTool({
           name: 'search_ads',

@@ -533,7 +533,7 @@ function autoSeed() {
   }
 }
 
-autoSeed();
+if (!process.env.NO_AUTO_SEED) autoSeed();
 
 // ─── Auth Context ─────────────────────────────────────────────────────────────
 
