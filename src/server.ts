@@ -21,6 +21,34 @@ import { sendUsdc, isPaymentEnabled, getPlatformBalance } from './payments/withd
 
 const args = process.argv.slice(2);
 
+// Handle --help before anything else (no DB init, no side effects)
+if (args.includes('--help') || args.includes('-h')) {
+  console.log(`agentic-ads — MCP server for advertising in AI agent conversations
+
+Usage:
+  agentic-ads [options]
+
+Options:
+  --stdio           Run as MCP stdio server (default)
+  --http            Run as HTTP server
+  --port <number>   HTTP port (default: 3000, or PORT env var)
+  --db <path>       SQLite database path (default: agentic-ads.db, or DATABASE_PATH env var)
+  --api-key <key>   Authenticate with API key (or AGENTIC_ADS_API_KEY env var)
+  -h, --help        Show this help message
+
+Environment Variables:
+  PORT                    HTTP server port
+  DATABASE_PATH           Path to SQLite database file
+  AGENTIC_ADS_API_KEY     API key for authentication
+
+Examples:
+  npx agentic-ads                    # Start MCP stdio server (for Claude, Cursor, etc.)
+  npx agentic-ads --http             # Start HTTP server on port 3000
+  npx agentic-ads --http --port 8080 # Start HTTP server on port 8080
+`);
+  process.exit(0);
+}
+
 const mode = args.includes('--stdio')
   ? 'stdio'
   : args.includes('--http')
@@ -1602,6 +1630,107 @@ async function startHttp() {
       return;
     }
 
+    // ─── GET /dev/register — Self-serve registration form ─────────────────────
+    if (url.pathname === '/dev/register' && req.method === 'GET') {
+      const host = req.headers.host;
+      const proto = req.headers['x-forwarded-proto'] === 'https' ? 'https' : (host?.includes('localhost') ? 'http' : 'https');
+      const publicBase = host ? `${proto}://${host}` : `http://localhost:${port}`;
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Register — Agentic Ads</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card { background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 2rem; max-width: 480px; width: 100%; margin: 1rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #fff; }
+    .subtitle { color: #888; margin-bottom: 1.5rem; font-size: 0.9rem; }
+    label { display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 0.3rem; margin-top: 1rem; }
+    input, textarea { width: 100%; padding: 0.6rem 0.8rem; background: #0d0d1a; border: 1px solid #444; border-radius: 6px; color: #fff; font-size: 0.95rem; }
+    input:focus, textarea:focus { outline: none; border-color: #6c63ff; }
+    textarea { resize: vertical; min-height: 60px; font-family: inherit; }
+    button { width: 100%; margin-top: 1.5rem; padding: 0.7rem; background: #6c63ff; color: #fff; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600; }
+    button:hover { background: #5a52d5; }
+    button:disabled { background: #444; cursor: not-allowed; }
+    .result { margin-top: 1.5rem; padding: 1rem; background: #0d2818; border: 1px solid #1a5c2e; border-radius: 8px; display: none; }
+    .result.error { background: #2d0a0a; border-color: #5c1a1a; }
+    .result h3 { font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .key-box { background: #000; padding: 0.5rem 0.8rem; border-radius: 4px; font-family: monospace; font-size: 0.85rem; word-break: break-all; margin: 0.5rem 0; user-select: all; }
+    .copy-btn { background: #333; border: 1px solid #555; color: #ccc; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; margin-top: 0.3rem; }
+    .copy-btn:hover { background: #444; }
+    .info { font-size: 0.8rem; color: #888; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Get Your API Key</h1>
+    <p class="subtitle">Register to start monetizing your MCP server with ads. Takes 10 seconds.</p>
+    <form id="regForm">
+      <label for="name">Name / Project Name *</label>
+      <input type="text" id="name" name="name" required placeholder="My MCP Bot">
+      <label for="email">Email *</label>
+      <input type="email" id="email" name="email" required placeholder="you@example.com">
+      <label for="project_description">Project Description (optional)</label>
+      <textarea id="project_description" name="project_description" placeholder="Brief description of your MCP server or agent..." maxlength="500"></textarea>
+      <button type="submit" id="submitBtn">Get API Key</button>
+    </form>
+    <div class="result" id="result"></div>
+  </div>
+  <script>
+    const form = document.getElementById('regForm');
+    const resultDiv = document.getElementById('result');
+    const submitBtn = document.getElementById('submitBtn');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Registering...';
+      resultDiv.style.display = 'none';
+      try {
+        const body = {
+          name: document.getElementById('name').value.trim(),
+          email: document.getElementById('email').value.trim(),
+        };
+        const desc = document.getElementById('project_description').value.trim();
+        if (desc) body.project_description = desc;
+        const res = await fetch('${publicBase}/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          resultDiv.className = 'result error';
+          resultDiv.innerHTML = '<h3>Registration Failed</h3><p>' + (data.error || 'Unknown error') + '</p>';
+        } else {
+          resultDiv.className = 'result';
+          resultDiv.innerHTML =
+            '<h3>Registration Successful!</h3>' +
+            '<p>Your API key (save it — shown only once):</p>' +
+            '<div class="key-box" id="apiKey">' + data.api_key + '</div>' +
+            '<button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById(\\'apiKey\\').textContent)">Copy Key</button>' +
+            '<p class="info">MCP URL: <code>' + data.mcp_url + '</code></p>' +
+            '<p class="info">Developer ID: <code>' + data.developer_id + '</code></p>';
+        }
+        resultDiv.style.display = 'block';
+      } catch (err) {
+        resultDiv.className = 'result error';
+        resultDiv.innerHTML = '<h3>Error</h3><p>' + err.message + '</p>';
+        resultDiv.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Get API Key';
+      }
+    });
+  </script>
+</body>
+</html>`);
+      return;
+    }
+
     // ─── REST: POST /api/register ─────────────────────────────────────────────
     if (url.pathname === '/api/register' && req.method === 'POST') {
       // IP-based rate limiting (5 registrations per hour per IP)
@@ -1630,9 +1759,9 @@ async function startHttp() {
           return;
         }
 
-        let parsed: { name?: unknown; email?: unknown };
+        let parsed: { name?: unknown; email?: unknown; project_description?: unknown };
         try {
-          parsed = JSON.parse(body) as { name?: unknown; email?: unknown };
+          parsed = JSON.parse(body) as { name?: unknown; email?: unknown; project_description?: unknown };
         } catch {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid JSON body' }));
@@ -1641,6 +1770,7 @@ async function startHttp() {
 
         const name = parsed.name;
         const email = parsed.email;
+        const projectDescription = parsed.project_description;
 
         // Validate name (required)
         if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -1662,8 +1792,26 @@ async function startHttp() {
           return;
         }
 
+        // Validate project_description (optional, string, max 500 chars)
+        if (projectDescription !== undefined && projectDescription !== null) {
+          if (typeof projectDescription !== 'string') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'project_description must be a string' }));
+            return;
+          }
+          if (projectDescription.length > 500) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'project_description must be 500 characters or less' }));
+            return;
+          }
+        }
+
         try {
-          const developer = createDeveloper(db, { name: name.trim(), email });
+          const developer = createDeveloper(db, {
+            name: name.trim(),
+            email,
+            project_description: typeof projectDescription === 'string' ? projectDescription.trim() : undefined,
+          });
           const apiKey = generateApiKey(db, 'developer', developer.id);
           const host = req.headers.host;
           const proto = req.headers['x-forwarded-proto'] === 'https' ? 'https' : (host?.includes('localhost') ? 'http' : 'https');
@@ -1791,9 +1939,206 @@ async function startHttp() {
       return;
     }
 
+    // ─── REST: POST /api/events ───────────────────────────────────────────────
+    // Report an impression or click event for a given ad_id.
+    // Auth: Authorization: Bearer <developer_api_key>
+    // Body: { ad_id: string, event_type: "impression" | "click" }
+    if (url.pathname === '/api/events' && req.method === 'POST') {
+      const rawKey = extractKeyFromHeader(req.headers.authorization);
+      if (!rawKey) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing Authorization: Bearer <api_key>' }));
+        return;
+      }
+      let eventsAuth: AuthContext;
+      try {
+        eventsAuth = authenticate(db, rawKey);
+      } catch (err) {
+        if (err instanceof AuthError) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message }));
+          return;
+        }
+        throw err;
+      }
+      if (eventsAuth.entity_type !== 'developer') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Developer API key required' }));
+        return;
+      }
+
+      let body = '';
+      let bodyTooLarge = false;
+      req.on('data', (chunk: Buffer) => {
+        body += chunk.toString();
+        if (body.length > MAX_BODY_SIZE) { bodyTooLarge = true; req.destroy(); }
+      });
+      req.on('end', async () => {
+        if (bodyTooLarge) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Request body too large' }));
+          return;
+        }
+        let parsed: { ad_id?: unknown; event_type?: unknown };
+        try {
+          parsed = JSON.parse(body) as { ad_id?: unknown; event_type?: unknown };
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+          return;
+        }
+        const ad_id = typeof parsed.ad_id === 'string' ? parsed.ad_id : null;
+        const event_type = parsed.event_type;
+        if (!ad_id) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'ad_id is required' }));
+          return;
+        }
+        if (event_type !== 'impression' && event_type !== 'click') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'event_type must be "impression" or "click"' }));
+          return;
+        }
+
+        const { getAdById: evGetAd, insertEvent: evInsert, updateAdStats: evUpdateStats, updateCampaignSpent: evUpdateSpent, updateCampaignStatus: evUpdateStatus, getCampaignById: evGetCampaign } = await import('./db/index.js');
+
+        const ad = evGetAd(db, ad_id);
+        if (!ad) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Ad not found' }));
+          return;
+        }
+        const campaign = evGetCampaign(db, ad.campaign_id);
+        if (!campaign || campaign.status !== 'active') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Campaign not active' }));
+          return;
+        }
+
+        // Dedup: same developer+ad+event within window
+        const dedupSeconds = event_type === 'impression' ? 60 : 300;
+        const recentDupe = db.prepare(`
+          SELECT id FROM events
+          WHERE developer_id = ? AND ad_id = ? AND event_type = ?
+            AND created_at >= datetime('now', '-' || ? || ' seconds')
+          LIMIT 1
+        `).get(eventsAuth.entity_id, ad_id, event_type, dedupSeconds) as { id: string } | undefined;
+        if (recentDupe) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Duplicate event — already reported recently', existing_event_id: recentDupe.id }));
+          return;
+        }
+
+        let cost = 0;
+        if (campaign.pricing_model === 'cpm' && event_type === 'impression') {
+          cost = campaign.bid_amount / 1000;
+        } else if (campaign.pricing_model === 'cpc' && event_type === 'click') {
+          cost = campaign.bid_amount;
+        }
+
+        if (campaign.spent + cost > campaign.total_budget) {
+          evUpdateStatus(db, campaign.id, 'paused');
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Campaign budget exhausted' }));
+          return;
+        }
+
+        const developerRevenue = cost * 0.7;
+        const platformRevenue = cost * 0.3;
+
+        const ev = db.transaction(() => {
+          const e = evInsert(db, {
+            ad_id,
+            developer_id: eventsAuth.entity_id,
+            event_type,
+            amount_charged: cost,
+            developer_revenue: developerRevenue,
+            platform_revenue: platformRevenue,
+          });
+          evUpdateStats(db, ad_id, event_type, cost);
+          if (cost > 0) evUpdateSpent(db, campaign.id, cost);
+          const updated = evGetCampaign(db, campaign.id);
+          if (updated && updated.spent >= updated.total_budget) evUpdateStatus(db, campaign.id, 'paused');
+          return e;
+        })();
+
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          event_id: ev.id,
+          event_type,
+          amount_charged: cost,
+          developer_revenue: developerRevenue,
+          remaining_budget: campaign.total_budget - campaign.spent - cost,
+        }));
+      });
+      return;
+    }
+
+    // ─── REST: GET /api/earnings ──────────────────────────────────────────────
+    // Get earnings summary for the authenticated developer.
+    // Auth: Authorization: Bearer <developer_api_key>
+    if (url.pathname === '/api/earnings' && req.method === 'GET') {
+      const rawKey = extractKeyFromHeader(req.headers.authorization);
+      if (!rawKey) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing Authorization: Bearer <api_key>' }));
+        return;
+      }
+      let earningsAuth: AuthContext;
+      try {
+        earningsAuth = authenticate(db, rawKey);
+      } catch (err) {
+        if (err instanceof AuthError) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message }));
+          return;
+        }
+        throw err;
+      }
+      if (earningsAuth.entity_type !== 'developer') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Developer API key required' }));
+        return;
+      }
+
+      const devId = earningsAuth.entity_id;
+      const totals = db.prepare(`
+        SELECT
+          COALESCE(SUM(developer_revenue), 0)                                          AS total_earnings,
+          COALESCE(SUM(CASE WHEN event_type = 'impression' THEN 1 ELSE 0 END), 0)     AS total_impressions,
+          COALESCE(SUM(CASE WHEN event_type = 'click'      THEN 1 ELSE 0 END), 0)     AS total_clicks,
+          COALESCE(SUM(CASE WHEN event_type = 'conversion' THEN 1 ELSE 0 END), 0)     AS total_conversions
+        FROM events WHERE developer_id = ?
+      `).get(devId) as { total_earnings: number; total_impressions: number; total_clicks: number; total_conversions: number };
+
+      function sqliteDt(d: Date): string {
+        return d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
+      }
+      const now = new Date();
+      function earningsSinceRest(dt: Date): number {
+        const row = db.prepare(`SELECT COALESCE(SUM(developer_revenue), 0) AS total FROM events WHERE developer_id = ? AND created_at >= ?`).get(devId, sqliteDt(dt)) as { total: number };
+        return row.total;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        total_earnings: totals.total_earnings,
+        total_impressions: totals.total_impressions,
+        total_clicks: totals.total_clicks,
+        total_conversions: totals.total_conversions,
+        period_earnings: {
+          last_24h: earningsSinceRest(new Date(now.getTime() - 24 * 60 * 60 * 1000)),
+          last_7d:  earningsSinceRest(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)),
+          last_30d: earningsSinceRest(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)),
+          all_time: totals.total_earnings,
+        },
+      }));
+      return;
+    }
+
     // 404 for anything else
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found. Use /mcp for MCP protocol, /health for health check, POST /api/register to create a developer account, or GET /api/search to search ads.' }));
+    res.end(JSON.stringify({ error: 'Not found. Use /mcp for MCP protocol, /health for health check, POST /api/register to create a developer account, GET /api/search to search ads, POST /api/events to report events, or GET /api/earnings to check earnings.' }));
   });
 
   httpServer.listen(port, () => {
