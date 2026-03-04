@@ -11,6 +11,7 @@
     "build": "tsc",
     "watch": "tsc --watch",
     "start": "node build/index.js",
+    "start:http": "node build/index.js --http",
     "prepare": "npm run build"
   },
   "keywords": [
