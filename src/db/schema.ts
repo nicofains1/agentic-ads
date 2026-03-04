@@ -16,6 +16,7 @@ export interface Developer {
   id: string;
   name: string;
   email: string | null;
+  project_description: string | null;
   wallet_address: string | null;
   referral_code: string | null;
   reputation_score: number;
@@ -164,13 +165,14 @@ CREATE TABLE IF NOT EXISTS advertisers (
 );
 
 CREATE TABLE IF NOT EXISTS developers (
-  id                TEXT PRIMARY KEY,
-  name              TEXT NOT NULL,
-  email             TEXT,
-  wallet_address    TEXT,
-  referral_code     TEXT,
-  reputation_score  REAL DEFAULT 1.0,
-  created_at        TEXT DEFAULT CURRENT_TIMESTAMP
+  id                    TEXT PRIMARY KEY,
+  name                  TEXT NOT NULL,
+  email                 TEXT,
+  project_description   TEXT,
+  wallet_address        TEXT,
+  referral_code         TEXT,
+  reputation_score      REAL DEFAULT 1.0,
+  created_at            TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS campaigns (
@@ -337,4 +339,10 @@ CREATE TABLE IF NOT EXISTS withdrawals (
 
 CREATE INDEX IF NOT EXISTS idx_withdrawals_developer ON withdrawals(developer_id);
 CREATE INDEX IF NOT EXISTS idx_withdrawals_status    ON withdrawals(status);
+`;
+
+// ─── Migration V3: add project_description to developers ─────────────────
+
+export const MIGRATION_V3_SQL = `
+ALTER TABLE developers ADD COLUMN project_description TEXT;
 `;

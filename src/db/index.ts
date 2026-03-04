@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import {
   SCHEMA_SQL,
   MIGRATION_V2_SQL,
+  MIGRATION_V3_SQL,
   WITHDRAWAL_SCHEMA_SQL,
   CHAIN_CONFIGS_SEED,
   type Ad,
@@ -57,6 +58,7 @@ export function initDatabase(dbPath?: string): InstanceType<typeof Database> {
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA_SQL);
   migrateToV2(db);
+  migrateToV3(db);
   seedChainConfigs(db);
   db.exec(WITHDRAWAL_SCHEMA_SQL);
   return db;
@@ -72,6 +74,19 @@ function migrateToV2(db: InstanceType<typeof Database>): void {
     const trimmed = stmt.trim();
     if (trimmed) {
       try { db.exec(trimmed); } catch { /* index/table already exists */ }
+    }
+  }
+}
+
+/** Idempotent migration: add project_description column to developers. */
+function migrateToV3(db: InstanceType<typeof Database>): void {
+  const devCols = (db.pragma('table_info(developers)') as Array<{ name: string }>).map(c => c.name);
+  if (devCols.includes('project_description')) return; // Already migrated
+
+  for (const stmt of MIGRATION_V3_SQL.split(';')) {
+    const trimmed = stmt.trim();
+    if (trimmed) {
+      try { db.exec(trimmed); } catch { /* column already exists */ }
     }
   }
 }
@@ -105,13 +120,13 @@ export function createAdvertiser(
 
 export function createDeveloper(
   db: InstanceType<typeof Database>,
-  data: { name: string; email?: string },
+  data: { name: string; email?: string; project_description?: string },
 ): Developer {
   const id = crypto.randomUUID();
   const stmt = db.prepare(
-    'INSERT INTO developers (id, name, email) VALUES (?, ?, ?)',
+    'INSERT INTO developers (id, name, email, project_description) VALUES (?, ?, ?, ?)',
   );
-  stmt.run(id, data.name, data.email ?? null);
+  stmt.run(id, data.name, data.email ?? null, data.project_description ?? null);
   return db.prepare('SELECT * FROM developers WHERE id = ?').get(id) as Developer;
 }
 

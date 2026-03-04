@@ -16,10 +16,14 @@
 
 **Step 1 — Register and get your API key (30 seconds):**
 
+Visit the web form: **[https://agentic-ads-production.up.railway.app/dev/register](https://agentic-ads-production.up.railway.app/dev/register)**
+
+Or use the API directly:
+
 ```bash
 curl -X POST https://agentic-ads-production.up.railway.app/api/register \
   -H "Content-Type: application/json" \
-  -d '{"name": "My MCP Bot", "email": "me@example.com"}'
+  -d '{"name": "My MCP Bot", "email": "me@example.com", "project_description": "A coding assistant that recommends dev tools"}'
 # Returns: { "api_key": "aa_dev_...", "mcp_url": "https://agentic-ads-production.up.railway.app/mcp" }
 ```
 
@@ -253,12 +257,18 @@ Choose how you want to pay (advertisers) or earn (developers):
 
 ## Getting Your API Key
 
-To call `report_event` or advertiser tools, you need an API key. Register via the REST endpoint:
+To call `report_event` or advertiser tools, you need an API key.
+
+**Option A — Web form (easiest):**
+
+Visit **[https://agentic-ads-production.up.railway.app/dev/register](https://agentic-ads-production.up.railway.app/dev/register)** and fill in your details. Your API key is displayed immediately.
+
+**Option B — API:**
 
 ```bash
 curl -X POST https://agentic-ads-production.up.railway.app/api/register \
   -H "Content-Type: application/json" \
-  -d '{"name": "My MCP Bot", "email": "me@example.com"}'
+  -d '{"name": "My MCP Bot", "email": "me@example.com", "project_description": "A coding assistant"}'
 ```
 
 Response:
@@ -269,6 +279,12 @@ Response:
   "mcp_url": "https://agentic-ads-production.up.railway.app/mcp"
 }
 ```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Your project or bot name |
+| `email` | Yes | Contact email |
+| `project_description` | No | Brief description of your MCP server (max 500 chars) |
 
 Use the `api_key` in the `Authorization` header: `Authorization: Bearer aa_dev_...`
 
