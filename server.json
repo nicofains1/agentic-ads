@@ -3,7 +3,7 @@
   "name": "io.github.nicofains1/agentic-ads",
   "title": "Agentic Ads",
   "description": "Ad network for AI agents — monetize MCP servers with contextual ads. 70% revenue share.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "repository": {
     "url": "https://github.com/nicofains1/agentic-ads",
     "source": "github"
