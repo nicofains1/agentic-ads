@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 
-import { initDatabase, createAdvertiser, createDeveloper, createCampaign, createAd, updateDeveloperWallet, getDeveloperById, findDeveloperByWallet, createWithdrawal, completeWithdrawal, failWithdrawal, getTotalWithdrawn, getRecentWithdrawal, getDeveloperEarningsTotal, getActiveAds } from './db/index.js';
+import { initDatabase, createAdvertiser, createDeveloper, createCampaign, createAd, updateDeveloperWallet, getDeveloperById, findDeveloperByWallet, createWithdrawal, completeWithdrawal, failWithdrawal, getTotalWithdrawn, getRecentWithdrawal, getDeveloperEarningsTotal, getActiveAds, recordTelemetryCall, getTelemetryStats } from './db/index.js';
 import { getAdGuidelines } from './tools/consumer/get-guidelines.js';
 import { authenticate, extractKeyFromHeader, generateApiKey, type AuthContext, AuthError } from './auth/middleware.js';
 import { RateLimiter, RateLimitError } from './auth/rate-limiter.js';
@@ -593,6 +593,23 @@ function logToolCall(toolName: string, sessionId?: string): void {
   console.error(`[agentic-ads] tool=${toolName} ts=${ts} session=${sessionId ?? 'stdio'}${developerInfo}`);
 }
 
+/** Record a telemetry call — fire-and-forget, never throws. */
+function trackCall(toolName: string, sessionId?: string, extra?: { query?: string; num_results?: number }): void {
+  try {
+    const auth = sessionId ? sessionAuthMap.get(sessionId) : sessionAuthMap.get(STDIO_SESSION_KEY);
+    recordTelemetryCall(db, {
+      tool_name: toolName,
+      session_id: sessionId ?? null,
+      query: extra?.query ?? null,
+      num_results: extra?.num_results ?? null,
+      developer_id: auth?.entity_type === 'developer' ? auth.entity_id : null,
+      source: 'mcp',
+    });
+  } catch (err) {
+    console.error(`[agentic-ads] Telemetry write error:`, err);
+  }
+}
+
 function registerTools(server: McpServer): void {
 
 // ─── Consumer Tools ──────────────────────────────────────────────────────────
@@ -603,6 +620,7 @@ server.tool(
   {},
   async (_params, extra) => {
     logToolCall('get_ad_guidelines', extra.sessionId);
+    trackCall('get_ad_guidelines', extra.sessionId);
     const guidelines = getAdGuidelines();
     return {
       content: [
@@ -641,6 +659,7 @@ server.tool(
     });
 
     if (activeAds.length === 0) {
+      trackCall('search_ads', extra.sessionId, { query: params.query, num_results: 0 });
       return { content: [{ type: 'text', text: JSON.stringify({ ads: [], message: 'No ads available' }) }] };
     }
 
@@ -703,6 +722,8 @@ server.tool(
       return ad;
     });
 
+    trackCall('search_ads', extra.sessionId, { query: params.query, num_results: enrichedAds.length });
+
     return {
       content: [
         {
@@ -727,6 +748,7 @@ server.tool(
   },
   async (params, extra) => {
     logToolCall('report_event', extra.sessionId);
+    trackCall('report_event', extra.sessionId);
     const auth = requireAuth(extra, 'developer');
     checkRateLimit(extra, 'report_event');
     const { getAdById, insertEvent, updateAdStats, updateCampaignSpent, updateCampaignStatus, getCampaignById, findEventByTxHash, updateEventVerification } = await import('./db/index.js');
@@ -953,6 +975,7 @@ server.tool(
   },
   async (params, extra) => {
     logToolCall('create_campaign', extra.sessionId);
+    trackCall('create_campaign', extra.sessionId);
     const auth = requireAuth(extra, 'advertiser');
     checkRateLimit(extra, 'create_campaign');
     const { createCampaign } = await import('./db/index.js');
@@ -1004,6 +1027,7 @@ server.tool(
   },
   async (params, extra) => {
     logToolCall('create_ad', extra.sessionId);
+    trackCall('create_ad', extra.sessionId);
     const auth = requireAuth(extra, 'advertiser');
     checkRateLimit(extra, 'create_ad');
 
@@ -1064,6 +1088,7 @@ server.tool(
   },
   async (params, extra) => {
     logToolCall('get_campaign_analytics', extra.sessionId);
+    trackCall('get_campaign_analytics', extra.sessionId);
     const auth = requireAuth(extra, 'advertiser');
     checkRateLimit(extra, 'get_campaign_analytics');
     const { getCampaignById, getAdsByCampaign } = await import('./db/index.js');
@@ -1144,6 +1169,7 @@ server.tool(
   },
   async (params, extra) => {
     logToolCall('update_campaign', extra.sessionId);
+    trackCall('update_campaign', extra.sessionId);
     const auth = requireAuth(extra, 'advertiser');
     checkRateLimit(extra, 'update_campaign');
     const { getCampaignById, updateCampaign } = await import('./db/index.js');
@@ -1198,6 +1224,7 @@ server.tool(
   },
   async (params, extra) => {
     logToolCall('list_campaigns', extra.sessionId);
+    trackCall('list_campaigns', extra.sessionId);
     const auth = requireAuth(extra, 'advertiser');
     checkRateLimit(extra, 'list_campaigns');
     const { listCampaigns } = await import('./db/index.js');
@@ -1241,6 +1268,7 @@ server.tool(
   {},
   async (_params, extra) => {
     logToolCall('get_developer_earnings', extra.sessionId);
+    trackCall('get_developer_earnings', extra.sessionId);
     const auth = requireAuth(extra, 'developer');
     checkRateLimit(extra, 'get_developer_earnings');
 
@@ -1340,6 +1368,7 @@ server.tool(
   },
   async (params, extra) => {
     logToolCall('register_wallet', extra.sessionId);
+    trackCall('register_wallet', extra.sessionId);
     const auth = requireAuth(extra, 'developer');
     checkRateLimit(extra, 'register_wallet');
 
@@ -1385,6 +1414,7 @@ server.tool(
   },
   async (params, extra) => {
     logToolCall('get_verification_status', extra.sessionId);
+    trackCall('get_verification_status', extra.sessionId);
     const auth = requireAuth(extra, 'developer');
     checkRateLimit(extra, 'get_verification_status');
     const { getEventById } = await import('./db/index.js');
@@ -1427,6 +1457,7 @@ server.tool(
   },
   async (params, extra) => {
     logToolCall('request_withdrawal', extra.sessionId);
+    trackCall('request_withdrawal', extra.sessionId);
     const auth = requireAuth(extra, 'developer');
     checkRateLimit(extra, 'request_withdrawal');
 
@@ -1934,6 +1965,16 @@ async function startHttp() {
 
       console.error(`[agentic-ads] GET /api/search query="${query ?? ''}" results=${enriched.length} ts=${new Date().toISOString()}`);
 
+      try {
+        recordTelemetryCall(db, {
+          tool_name: 'search_ads',
+          query: query ?? null,
+          num_results: enriched.length,
+          developer_id: searchAuth?.entity_type === 'developer' ? searchAuth.entity_id : null,
+          source: 'rest',
+        });
+      } catch { /* telemetry best-effort */ }
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ads: enriched, count: enriched.length }));
       return;
@@ -2136,9 +2177,53 @@ async function startHttp() {
       return;
     }
 
+    // ─── REST: GET /api/stats ──────────────────────────────────────────────────
+    // Telemetry stats — protected with admin API key (ADMIN_API_KEY env var).
+    // If ADMIN_API_KEY is not set, falls back to any valid advertiser API key.
+    if (url.pathname === '/api/stats' && req.method === 'GET') {
+      const adminKey = process.env.ADMIN_API_KEY;
+      const rawKey = extractKeyFromHeader(req.headers.authorization) ?? url.searchParams.get('api_key');
+
+      if (adminKey) {
+        // If ADMIN_API_KEY env is set, require exact match
+        if (rawKey !== adminKey) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid admin API key' }));
+          return;
+        }
+      } else {
+        // Fallback: require any valid advertiser key
+        if (!rawKey) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing Authorization: Bearer <admin_api_key>' }));
+          return;
+        }
+        try {
+          const auth = authenticate(db, rawKey);
+          if (auth.entity_type !== 'advertiser') {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Admin or advertiser API key required' }));
+            return;
+          }
+        } catch (err) {
+          if (err instanceof AuthError) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+            return;
+          }
+          throw err;
+        }
+      }
+
+      const stats = getTelemetryStats(db);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(stats));
+      return;
+    }
+
     // 404 for anything else
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found. Use /mcp for MCP protocol, /health for health check, POST /api/register to create a developer account, GET /api/search to search ads, POST /api/events to report events, or GET /api/earnings to check earnings.' }));
+    res.end(JSON.stringify({ error: 'Not found. Use /mcp for MCP protocol, /health for health check, POST /api/register to create a developer account, GET /api/search to search ads, POST /api/events to report events, GET /api/earnings to check earnings, or GET /api/stats for telemetry.' }));
   });
 
   httpServer.listen(port, () => {

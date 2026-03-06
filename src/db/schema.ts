@@ -346,3 +346,33 @@ CREATE INDEX IF NOT EXISTS idx_withdrawals_status    ON withdrawals(status);
 export const MIGRATION_V3_SQL = `
 ALTER TABLE developers ADD COLUMN project_description TEXT;
 `;
+
+// ─── Telemetry types ────────────────────────────────────────────────────────
+
+export interface TelemetryCall {
+  id: string;
+  tool_name: string;
+  session_id: string | null;
+  query: string | null;
+  num_results: number | null;
+  developer_id: string | null;
+  source: 'mcp' | 'rest';
+  created_at: string;
+}
+
+export const TELEMETRY_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS telemetry_calls (
+  id            TEXT PRIMARY KEY,
+  tool_name     TEXT NOT NULL,
+  session_id    TEXT,
+  query         TEXT,
+  num_results   INTEGER,
+  developer_id  TEXT,
+  source        TEXT NOT NULL DEFAULT 'mcp' CHECK(source IN ('mcp','rest')),
+  created_at    TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_telemetry_tool_name  ON telemetry_calls(tool_name);
+CREATE INDEX IF NOT EXISTS idx_telemetry_created_at ON telemetry_calls(created_at);
+CREATE INDEX IF NOT EXISTS idx_telemetry_session_id ON telemetry_calls(session_id);
+`;
