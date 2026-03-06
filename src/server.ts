@@ -16,6 +16,7 @@ import { generateReferralCode, buildReferralLink } from './verification/referral
 import { verifyWalletSignature, buildRegisterMessage } from './verification/wallet.js';
 import { validateCreativeText } from './security/creative-sanitization.js';
 import { sendUsdc, isPaymentEnabled, getPlatformBalance } from './payments/withdraw.js';
+import { initPostHog, trackEvent, shutdownPostHog } from './analytics/posthog.js';
 
 // ─── CLI Args ────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,16 @@ const MAX_BODY_SIZE = 10 * 1024; // 10KB max for POST bodies
 
 const db = initDatabase(dbPath);
 console.error(`[agentic-ads] Database initialized at: ${dbPath}`);
+
+// ─── Analytics ──────────────────────────────────────────────────────────────
+
+initPostHog();
+
+process.on('SIGTERM', async () => {
+  console.error('[agentic-ads] SIGTERM received — shutting down...');
+  await shutdownPostHog();
+  process.exit(0);
+});
 
 // ─── Auto-Seed Production DB ─────────────────────────────────────────────────
 
@@ -723,6 +734,11 @@ server.tool(
     });
 
     trackCall('search_ads', extra.sessionId, { query: params.query, num_results: enrichedAds.length });
+    trackEvent(auth?.entity_id ?? 'anonymous', 'ads_searched', {
+      query: params.query,
+      results_count: enrichedAds.length,
+      source: 'mcp',
+    });
 
     return {
       content: [
@@ -865,6 +881,11 @@ server.tool(
         throw err;
       }
 
+      trackEvent(auth.entity_id, 'ad_event_reported', {
+        event_type: 'conversion',
+        ad_id: params.ad_id,
+      });
+
       return {
         content: [{
           type: 'text',
@@ -943,6 +964,11 @@ server.tool(
 
     const event = processEvent();
 
+    trackEvent(auth.entity_id, 'ad_event_reported', {
+      event_type: params.event_type,
+      ad_id: params.ad_id,
+    });
+
     return {
       content: [{
         type: 'text',
@@ -990,6 +1016,11 @@ server.tool(
       bid_amount: params.bid_amount,
       start_date: params.start_date,
       end_date: params.end_date,
+    });
+
+    trackEvent(auth.entity_id, 'campaign_created', {
+      pricing_model: params.pricing_model,
+      total_budget: params.total_budget,
     });
 
     return {
@@ -1645,6 +1676,9 @@ async function startHttp() {
           }
           const authInfo = auth ? ` authenticated as ${auth.entity_type}:${auth.entity_id}` : ' unauthenticated';
           console.error(`[agentic-ads] New MCP session: ${sid}${authInfo} ts=${new Date().toISOString()}`);
+          trackEvent(auth?.entity_id ?? 'anonymous', 'mcp_session_started', {
+            authenticated: !!auth,
+          });
         },
       });
 
@@ -1850,6 +1884,11 @@ async function startHttp() {
 
           console.error(`[agentic-ads] New developer registered: ${name.trim()} <${email}> (id: ${developer.id})`);
 
+          trackEvent(developer.id, 'developer_registered', {
+            name: name.trim(),
+            email,
+          });
+
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             developer_id: developer.id,
@@ -1974,6 +2013,11 @@ async function startHttp() {
           source: 'rest',
         });
       } catch { /* telemetry best-effort */ }
+      trackEvent(searchAuth?.entity_id ?? 'anonymous', 'ads_searched', {
+        query,
+        results_count: enriched.length,
+        source: 'rest',
+      });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ads: enriched, count: enriched.length }));
