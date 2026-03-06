@@ -6,7 +6,8 @@
   "type": "module",
   "main": "dist/server.js",
   "bin": {
-    "agentic-ads": "dist/server.js"
+    "agentic-ads": "dist/stdio.js",
+    "agentic-ads-server": "dist/server.js"
   },
   "scripts": {
     "build": "tsc",
