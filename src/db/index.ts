@@ -9,6 +9,7 @@ import {
   MIGRATION_V2_SQL,
   MIGRATION_V3_SQL,
   WITHDRAWAL_SCHEMA_SQL,
+  TELEMETRY_SCHEMA_SQL,
   CHAIN_CONFIGS_SEED,
   type Ad,
   type AdRow,
@@ -20,6 +21,7 @@ import {
   type Developer,
   type Event,
   type EventRow,
+  type TelemetryCall,
   type VerificationStatus,
   type Withdrawal,
   type WithdrawalStatus,
@@ -61,6 +63,7 @@ export function initDatabase(dbPath?: string): InstanceType<typeof Database> {
   migrateToV3(db);
   seedChainConfigs(db);
   db.exec(WITHDRAWAL_SCHEMA_SQL);
+  db.exec(TELEMETRY_SCHEMA_SQL);
   return db;
 }
 
@@ -627,4 +630,104 @@ export function getDeveloperEarningsTotal(
     WHERE developer_id = ?
   `).get(developerId) as { total: number };
   return row.total;
+}
+
+// ─── Telemetry ──────────────────────────────────────────────────────────────
+
+export function recordTelemetryCall(
+  db: InstanceType<typeof Database>,
+  data: {
+    tool_name: string;
+    session_id?: string | null;
+    query?: string | null;
+    num_results?: number | null;
+    developer_id?: string | null;
+    source?: 'mcp' | 'rest';
+  },
+): void {
+  const id = crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO telemetry_calls (id, tool_name, session_id, query, num_results, developer_id, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    data.tool_name,
+    data.session_id ?? null,
+    data.query ?? null,
+    data.num_results ?? null,
+    data.developer_id ?? null,
+    data.source ?? 'mcp',
+  );
+}
+
+export interface TelemetryStats {
+  total_calls: { [tool: string]: number };
+  last_24h_calls: { [tool: string]: number };
+  last_7d_calls: { [tool: string]: number };
+  unique_sessions_today: number;
+  unique_sessions_7d: number;
+  top_queries: Array<{ query: string; count: number }>;
+  daily_sessions: Array<{ date: string; count: number }>;
+}
+
+export function getTelemetryStats(db: InstanceType<typeof Database>): TelemetryStats {
+  // Total calls by tool (all time)
+  const totalRows = db.prepare(`
+    SELECT tool_name, COUNT(*) as count FROM telemetry_calls GROUP BY tool_name
+  `).all() as Array<{ tool_name: string; count: number }>;
+  const total_calls: { [tool: string]: number } = {};
+  for (const r of totalRows) total_calls[r.tool_name] = r.count;
+
+  // Last 24h calls by tool
+  const last24hRows = db.prepare(`
+    SELECT tool_name, COUNT(*) as count FROM telemetry_calls
+    WHERE created_at >= datetime('now', '-1 day') GROUP BY tool_name
+  `).all() as Array<{ tool_name: string; count: number }>;
+  const last_24h_calls: { [tool: string]: number } = {};
+  for (const r of last24hRows) last_24h_calls[r.tool_name] = r.count;
+
+  // Last 7d calls by tool
+  const last7dRows = db.prepare(`
+    SELECT tool_name, COUNT(*) as count FROM telemetry_calls
+    WHERE created_at >= datetime('now', '-7 days') GROUP BY tool_name
+  `).all() as Array<{ tool_name: string; count: number }>;
+  const last_7d_calls: { [tool: string]: number } = {};
+  for (const r of last7dRows) last_7d_calls[r.tool_name] = r.count;
+
+  // Unique sessions today
+  const sessionsToday = db.prepare(`
+    SELECT COUNT(DISTINCT session_id) as count FROM telemetry_calls
+    WHERE session_id IS NOT NULL AND created_at >= date('now')
+  `).get() as { count: number };
+
+  // Unique sessions last 7d
+  const sessions7d = db.prepare(`
+    SELECT COUNT(DISTINCT session_id) as count FROM telemetry_calls
+    WHERE session_id IS NOT NULL AND created_at >= datetime('now', '-7 days')
+  `).get() as { count: number };
+
+  // Top queries (search_ads)
+  const topQueries = db.prepare(`
+    SELECT query, COUNT(*) as count FROM telemetry_calls
+    WHERE tool_name = 'search_ads' AND query IS NOT NULL AND query != ''
+    GROUP BY query ORDER BY count DESC LIMIT 20
+  `).all() as Array<{ query: string; count: number }>;
+
+  // Daily unique sessions (last 30 days)
+  const dailySessions = db.prepare(`
+    SELECT date(created_at) as date, COUNT(DISTINCT session_id) as count
+    FROM telemetry_calls
+    WHERE session_id IS NOT NULL AND created_at >= datetime('now', '-30 days')
+    GROUP BY date(created_at) ORDER BY date DESC
+  `).all() as Array<{ date: string; count: number }>;
+
+  return {
+    total_calls,
+    last_24h_calls,
+    last_7d_calls,
+    unique_sessions_today: sessionsToday.count,
+    unique_sessions_7d: sessions7d.count,
+    top_queries: topQueries,
+    daily_sessions: dailySessions,
+  };
 }
